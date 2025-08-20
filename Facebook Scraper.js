@@ -306,6 +306,7 @@
   
     if (myToken !== runToken){ setUIBusy(false); return; }
     setUIBusy(false);
+    statusEl.textContent = 'Ready';
   
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
     if(hasAll){ toast('All three collected — downloading merged CSV…', 1400); downloadMerged(); }
