@@ -1,10 +1,10 @@
-(async function FB_Export_Persons_UNIFIED_v17(){
+(async function FB_Export_Persons_UNIFIED_v17b(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== UI =====
   const ui = document.createElement('div');
   Object.assign(ui.style, {
-    position:'fixed', right:'16px', top:'16px', width:'360px',
+    position:'fixed', right:'16px', top:'16px', width:'360px', maxWidth:'360px',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
     zIndex:2147483647, padding:'12px'
@@ -45,7 +45,7 @@
       '</div>' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px">Preview (first 50)</div>' +
-        '<div id="fbp-prev" style="max-height:240px;overflow:auto;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev" style="max-height:240px;overflow:auto;overflow-x:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
         '<button id="fbp-dl" style="flex:1;padding:8px;border:1px solid #2c8a3f;background:#1d7a31;color:#fff;border-radius:8px;cursor:pointer;font-weight:600">Download Merged CSV</button>' +
@@ -55,7 +55,7 @@
     '</div>';
   document.body.appendChild(ui);
 
-  // drag + persist
+  // ===== draggable (persist) =====
   (function(){
     const head = ui.querySelector('#fbp-head');
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
@@ -83,198 +83,60 @@
     }, true);
   })();
 
-  // modes
-  const modes = [
-    {key:'likes', label:'Likes'},
-    {key:'comments', label:'Comments'},
-    {key:'shares', label:'Shares'}
-  ];
-  const modeWrap = ui.querySelector('#fbp-modes');
-  let activeMode = 'likes';
-  const modeButtons = {};
-  function setActiveMode(k){
-    activeMode = k;
-    Object.values(modeButtons).forEach(el=>el.style.outline='');
-    if(modeButtons[k]) modeButtons[k].style.outline='2px solid #3b7cff';
-  }
-  modes.forEach(m=>{
-    const b=document.createElement('button');
-    Object.assign(b.style,{padding:'6px 10px',borderRadius:'8px',border:'1px solid #384155',background:'#171a20',color:'#e6e6e6',cursor:'pointer'});
-    b.textContent = m.label;
-    b.dataset.mode = m.key;
-    b.addEventListener('click',()=>setActiveMode(m.key));
-    modeWrap.appendChild(b);
-    modeButtons[m.key]=b;
-  });
+  // ===== modes =====
+  const modes=[{key:'likes',label:'Likes'},{key:'comments',label:'Comments'},{key:'shares',label:'Shares'}];
+  const modeWrap=ui.querySelector('#fbp-modes'); let activeMode='likes'; const modeButtons={};
+  function setActiveMode(k){ activeMode=k; Object.values(modeButtons).forEach(el=>el.style.outline=''); if(modeButtons[k]) modeButtons[k].style.outline='2px solid #3b7cff'; }
+  modes.forEach(m=>{ const b=document.createElement('button'); Object.assign(b.style,{padding:'6px 10px',borderRadius:'8px',border:'1px solid #384155',background:'#171a20',color:'#e6e6e6',cursor:'pointer'}); b.textContent=m.label; b.dataset.mode=m.key; b.addEventListener('click',()=>setActiveMode(m.key)); modeWrap.appendChild(b); modeButtons[m.key]=b; });
   setActiveMode('likes');
 
-  // refs
-  const prevBox   = ui.querySelector('#fbp-prev');
-  const likeC     = ui.querySelector('#fbp-likec');
-  const commentC  = ui.querySelector('#fbp-commentc');
-  const shareC    = ui.querySelector('#fbp-sharec');
-  const postKeyEl = ui.querySelector('#fbp-postkey');
-  const statusEl  = ui.querySelector('#fbp-status');
+  // ===== refs & utils already working =====
+  const prevBox=ui.querySelector('#fbp-prev'); const likeC=ui.querySelector('#fbp-likec'); const commentC=ui.querySelector('#fbp-commentc'); const shareC=ui.querySelector('#fbp-sharec'); const postKeyEl=ui.querySelector('#fbp-postkey'); const statusEl=ui.querySelector('#fbp-status');
+  function toast(msg,ms=1600){ const t=document.createElement('div'); Object.assign(t.style,{position:'fixed', right:'18px', bottom:'18px', background:'#1b5cff', color:'#fff', padding:'10px 12px', borderRadius:'10px', zIndex:2147483647, boxShadow:'0 8px 22px rgba(0,0,0,.35)', font:'12px system-ui, -apple-system, Segoe UI, Roboto'}); t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),ms); }
 
-  function toast(msg, ms=1600){
-    const t=document.createElement('div');
-    Object.assign(t.style,{
-      position:'fixed', right:'18px', bottom:'18px',
-      background:'#1b5cff', color:'#fff', padding:'10px 12px',
-      borderRadius:'10px', zIndex:2147483647, boxShadow:'0 8px 22px rgba(0,0,0,.35)',
-      font:'12px system-ui, -apple-system, Segoe UI, Roboto'
-    });
-    t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),ms);
-  }
-
-  // storage / URL
-  let POST_URL = location.href;
-  function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); } catch(e){ return u; } }
-  let POST_KEY = postKeyFromURL(POST_URL);
-  function setPostKeyLabel(){
-    postKeyEl.textContent = (POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'): POST_KEY);
-    postKeyEl.title = POST_KEY;
-  }
+  let POST_URL=location.href; function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
+  let POST_KEY=postKeyFromURL(POST_URL);
+  function setPostKeyLabel(){ postKeyEl.textContent=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY); postKeyEl.title=POST_KEY; }
   setPostKeyLabel();
-  ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
-    try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }catch{ toast('Could not copy URL'); }
-  });
+  ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }catch{ toast('Could not copy URL'); }});
 
-  const store = new Map();
-  const counts = {likes:0, comments:0, shares:0};
+  const store=new Map(); const counts={likes:0,comments:0,shares:0};
   function resetForThisPost(){ store.clear(); counts.likes=counts.comments=counts.shares=0; updateStats(); renderPreview(); }
 
-  // ===== Helpers / selectors =====
   function isScrollableY(n){const cs=getComputedStyle(n); return /(auto|scroll)/.test(cs.overflowY)&&n.scrollHeight>n.clientHeight+20;}
   function closestScrollable(n){for(let p=n;p;p=p.parentElement) if(isScrollableY(p)) return p; return null;}
-  let sc = null;
+  let sc=null;
 
-  function normalizeFB(href){
-    try{
-      const u=new URL(href,'https://www.facebook.com');
-      if(/^l\.facebook\.com$|^lm\.facebook\.com$/i.test(u.hostname)){
-        const redir=u.searchParams.get('u'); if(redir) return normalizeFB(decodeURIComponent(redir));
-      }
-      u.protocol='https:'; u.hostname='www.facebook.com'; u.hash='';
-      if(u.pathname==='/profile.php'){
-        const id=u.searchParams.get('id'); if(!id) return null;
-        u.search='?id='+encodeURIComponent(id);
-      } else {
-        u.search='';
-      }
-      u.pathname=u.pathname.replace(/\/+/g,'/').replace(/\/$/,'');
-      return u.toString();
-    }catch(e){ return null; }
-  }
-  function looksLikeProfile(url){
-    try{
-      const p=new URL(url).pathname.toLowerCase();
-      if(p==='/profile.php') return true;
-      if(/^\/people\/[^/]+\/\d+$/.test(p)) return true;
-      if(/^\/[a-z0-9.\-_]+$/.test(p)){
-        const bad=new Set(['events','groups','pages','marketplace','watch','gaming','reel','reels','photo','photos','videos','privacy','help','settings','notifications','bookmarks','messages','friends','stories','story.php','permalink.php','ufi','reactions','posts','share']);
-        return !bad.has(p.slice(1));
-      }
-      return false;
-    }catch(e){ return false; }
-  }
-  const isVisible = el => { const r=el.getBoundingClientRect(), cs=getComputedStyle(el); return r.width>0 && r.height>0 && cs.visibility==='visible' && cs.display!=='none'; };
-  const inMessageBody = a => !!(a.closest('[data-ad-preview="message"],[data-ad-comet-preview="message"]'));
-  const isCommentArticleNode = n => {
-    const art=n.closest && n.closest('[role="article"]'); if(!art) return false;
-    const al=(art.getAttribute('aria-label')||'').toLowerCase();
-    return al.startsWith('comment by') || al.startsWith('reply by');
-  };
+  function normalizeFB(href){ try{ const u=new URL(href,'https://www.facebook.com'); if(/^l\.facebook\.com$|^lm\.facebook\.com$/i.test(u.hostname)){ const redir=u.searchParams.get('u'); if(redir) return normalizeFB(decodeURIComponent(redir)); } u.protocol='https:'; u.hostname='www.facebook.com'; u.hash=''; if(u.pathname==='/profile.php'){ const id=u.searchParams.get('id'); if(!id) return null; u.search='?id='+encodeURIComponent(id); } else { u.search=''; } u.pathname=u.pathname.replace(/\/+/g,'/').replace(/\/$/,''); return u.toString(); }catch(e){ return null; } }
+  function looksLikeProfile(url){ try{ const p=new URL(url).pathname.toLowerCase(); if(p==='/profile.php') return true; if(/^\/people\/[^/]+\/\d+$/.test(p)) return true; if(/^\/[a-z0-9.\-_]+$/.test(p)){ const bad=new Set(['events','groups','pages','marketplace','watch','gaming','reel','reels','photo','photos','videos','privacy','help','settings','notifications','bookmarks','messages','friends','stories','story.php','permalink.php','ufi','reactions','posts','share']); return !bad.has(p.slice(1)); } return false; }catch(e){ return false; } }
+  const isVisible=el=>{ const r=el.getBoundingClientRect(), cs=getComputedStyle(el); return r.width>0&&r.height>0&&cs.visibility==='visible'&&cs.display!=='none'; };
+  const inMessageBody=a=>!!(a.closest('[data-ad-preview="message"],[data-ad-comet-preview="message"]'));
+  const isCommentArticleNode=n=>{ const art=n.closest&&n.closest('[role="article"]'); if(!art) return false; const al=(art.getAttribute('aria-label')||'').toLowerCase(); return al.startsWith('comment by')||al.startsWith('reply by'); };
+  function cleanName(s){ if(!s) return ''; s=s.replace(/\b(profile|cover)\s+(picture|photo)\s+(of|for)\s*/ig,''); s=s.replace(/\s*[·•]\s*\d+\s*[smhdw]\b.*$/i,''); s=s.replace(/\s*\b(seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago\b.*$/i,''); return s.trim(); }
+  function getNameFromAnchor(a){ const t=(a.textContent||'').trim(); if(t) return cleanName(t); const al=a.getAttribute('aria-label'); if(al) return cleanName(al); const imgLabel=a.querySelector('[aria-label]')?.getAttribute('aria-label'); if(imgLabel) return cleanName(imgLabel); const imgAlt=a.querySelector('img[alt]')?.getAttribute('alt'); if(imgAlt) return cleanName(imgAlt); return ''; }
 
-  function cleanName(s){
-    if(!s) return '';
-    s = s.replace(/\b(profile|cover)\s+(picture|photo)\s+(of|for)\s*/ig,'');
-    s = s.replace(/\s*[·•]\s*\d+\s*[smhdw]\b.*$/i,'');
-    s = s.replace(/\s*\b(seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago\b.*$/i,'');
-    return s.trim();
-  }
-  function getNameFromAnchor(a){
-    const t=(a.textContent||'').trim(); if(t) return cleanName(t);
-    const al=a.getAttribute('aria-label'); if(al) return cleanName(al);
-    const imgLabel=a.querySelector('[aria-label]')?.getAttribute('aria-label'); if(imgLabel) return cleanName(imgLabel);
-    const imgAlt=a.querySelector('img[alt]')?.getAttribute('alt'); if(imgAlt) return cleanName(imgAlt);
-    return '';
-  }
-
-  // item selectors
   function likeItems(){ return Array.from(sc.querySelectorAll('[role="listitem"],[data-visualcompletion="ignore-dynamic"]')).filter(isVisible); }
-  function pickLikeAnchor(item){
-    const header = item.querySelector('[data-ad-rendering-role="profile_name"] a[href]');
-    if(header) return header;
-    const anchors = Array.from(item.querySelectorAll('a[href]')).filter(isVisible);
-    const withText = anchors.find(a => (a.textContent||'').trim() && looksLikeProfile(normalizeFB(a.getAttribute('href'))));
-    return withText || anchors[0] || null;
-  }
+  function pickLikeAnchor(item){ const header=item.querySelector('[data-ad-rendering-role="profile_name"] a[href]'); if(header) return header; const anchors=Array.from(item.querySelectorAll('a[href]')).filter(isVisible); const withText=anchors.find(a=>(a.textContent||'').trim()&&looksLikeProfile(normalizeFB(a.getAttribute('href')))); return withText||anchors[0]||null; }
   function commentArticles(){ return Array.from(sc.querySelectorAll('[role="article"][aria-label^="Comment by "]')).filter(isVisible); }
-  function pickCommentAnchor(article){
-    const candidates = Array.from(article.querySelectorAll('a[href]')).filter(isVisible);
-    for(const a of candidates){
-      if(inMessageBody(a)) continue;
-      const url = normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) continue;
-      const txt = (a.textContent||'').trim(); if(!txt) continue;
-      if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) continue;
-      return a;
-    }
-    return null;
-  }
-  function sharerAnchors(){
-    const sel='[data-ad-rendering-role="profile_name"] a[href], h3 a[href]';
-    return Array.from(sc.querySelectorAll(sel)).filter(a=>{
-      if(!isVisible(a)) return false;
-      if(inMessageBody(a)) return false;
-      if(isCommentArticleNode(a)) return false;
-      const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) return false;
-      const txt=(a.textContent||'').trim(); if(!txt) return false;
-      if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) return false;
-      const ok = a.closest('[data-ad-rendering-role="profile_name"]') || a.closest('h1,h2,h3');
-      return !!ok;
-    });
-  }
+  function pickCommentAnchor(article){ const candidates=Array.from(article.querySelectorAll('a[href]')).filter(isVisible); for(const a of candidates){ if(inMessageBody(a)) continue; const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) continue; const txt=(a.textContent||'').trim(); if(!txt) continue; if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) continue; return a; } return null; }
+  function sharerAnchors(){ const sel='[data-ad-rendering-role="profile_name"] a[href], h3 a[href]'; return Array.from(sc.querySelectorAll(sel)).filter(a=>{ if(!isVisible(a)) return false; if(inMessageBody(a)) return false; if(isCommentArticleNode(a)) return false; const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) return false; const txt=(a.textContent||'').trim(); if(!txt) return false; if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) return false; const ok=a.closest('[data-ad-rendering-role="profile_name"]')||a.closest('h1,h2,h3'); return !!ok; }); }
 
-  // ===== Panel detection (robust)
-  function getDialog(container){
-    return container.closest && container.closest('[role="dialog"]');
-  }
-  function dialogText(dlg){
-    if(!dlg) return '';
-    const aria = (dlg.getAttribute('aria-label')||'');
-    const head = Array.from(dlg.querySelectorAll('h1,h2,h3,[role="heading"]'))
-                  .slice(0,2).map(e=>e.textContent||'').join(' ');
-    return (aria+' '+head).toLowerCase();
-  }
+  function getDialog(container){ return container.closest && container.closest('[role="dialog"]'); }
+  function dialogText(dlg){ if(!dlg) return ''; const aria=(dlg.getAttribute('aria-label')||''); const head=Array.from(dlg.querySelectorAll('h1,h2,h3,[role="heading"]')).slice(0,2).map(e=>e.textContent||'').join(' '); return (aria+' '+head).toLowerCase(); }
   function detectPanelType(container){
-    const dlg = getDialog(container);
-    const text = dialogText(dlg);
-
-    // Shares first (explicit phrases)
+    const dlg=getDialog(container); const text=dialogText(dlg);
     if(/\b(people who )?shared? this\b/.test(text) || /\bshares?\b/.test(text)) return 'shares';
-    // Reactions / Likes
     if(/\b(reaction|reacted|likes?)\b/.test(text)) return 'likes';
-    // Comments
     if(/\bcomments?\b/.test(text)) return 'comments';
-
-    // Structural hints (only when not in a Shares dialog)
     if(container.querySelector && container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
-
     return 'unknown';
   }
 
-  // storage ops
   function updateStats(){ likeC.textContent=counts.likes; commentC.textContent=counts.comments; shareC.textContent=counts.shares; }
   function upsertRow(name,url,mode){
-    if(!name||!url) return;
-    if(!looksLikeProfile(url)) return;
+    if(!name||!url) return; if(!looksLikeProfile(url)) return;
     const key=url;
-    const existing = store.get(key) || {
-      Person_Name:name, Person:url,
-      Like:'No', Share:'No', Comment:'No',
-      Publication_URL: POST_URL
-    };
+    const existing = store.get(key) || { Person_Name:name, Person:url, Like:'No', Share:'No', Comment:'No', Publication_URL: POST_URL };
     if(name && (!existing.Person_Name || existing.Person_Name.length < name.length)) existing.Person_Name = name;
     if(mode==='likes') existing.Like='Yes';
     if(mode==='comments') existing.Comment='Yes';
@@ -283,32 +145,29 @@
     store.set(key, existing);
   }
 
-  let lastRender = 0;
-  function maybeRender(force=false){
-    const now = Date.now();
-    if(force || now - lastRender > 900){ renderPreview(); lastRender = now; } else { updateStats(); }
-  }
+  let lastRender=0; function maybeRender(force=false){ const now=Date.now(); if(force || now-lastRender>900){ renderPreview(); lastRender=now; } else { updateStats(); } }
 
-  // Preview (cleaner headers; Publication_URL removed here for clarity)
+  // ===== PREVIEW (fixed layout to prevent panel shift) =====
   function renderPreview(){
     const rows = Array.from(store.values());
     let head =
-      '<table style="width:100%;border-collapse:collapse;font-size:11px">' +
-        '<thead>' +
-          '<tr style="position:sticky;top:0;background:#10131a">' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person_Name</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Like</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Share</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Comment</th>' +
-          '</tr>' +
-        '</thead><tbody>';
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
+        '<colgroup>' +
+          '<col style="width:42%"><col style="width:38%"><col style="width:6%"><col style="width:6%"><col style="width:8%">' +
+        '</colgroup>' +
+        '<thead><tr style="position:sticky;top:0;background:#10131a">' +
+          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person_Name</th>' +
+          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person</th>' +
+          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Like</th>' +
+          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Share</th>' +
+          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Comment</th>' +
+        '</tr></thead><tbody>';
     let body = '';
     for(let i=0;i<Math.min(rows.length,50);i++){
       const r=rows[i];
       body += '<tr>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escapeHTML(r.Person_Name)+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escapeHTML(r.Person_Name)+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Like+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Share+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Comment+'</td>' +
@@ -330,52 +189,33 @@
     document.body.appendChild(link); link.click(); link.remove();
   }
 
-  // ===== Run control =====
-  let runToken = 0;
-  function setUIBusy(busy, label){
-    ui.querySelector('#fbp-go').disabled = busy;
-    Object.values(modeButtons).forEach(b=>b.disabled=busy);
-    ui.querySelector('#fbp-go').style.opacity = busy ? .7 : 1;
-    if(label) statusEl.textContent = label;
-  }
+  // ===== Run control (unchanged) =====
+  let runToken=0;
+  function setUIBusy(busy,label){ ui.querySelector('#fbp-go').disabled=busy; Object.values(modeButtons).forEach(b=>b.disabled=busy); ui.querySelector('#fbp-go').style.opacity=busy?.7:1; if(label) statusEl.textContent=label; }
 
   ui.querySelector('#fbp-go').addEventListener('click', async ()=>{
     toast('Click inside the open panel…', 1400);
-    const ev = await new Promise(res=>{
-      const h=e=>{document.removeEventListener('click',h,true);res(e)}; document.addEventListener('click',h,true);
-    });
+    const ev = await new Promise(res=>{ const h=e=>{document.removeEventListener('click',h,true);res(e)}; document.addEventListener('click',h,true); });
     const seed = ev.target;
     let c = closestScrollable(seed);
-    if(!c){
-      const dlg = seed.closest && (seed.closest('[role="dialog"],[aria-modal="true"]') || document.querySelector('[role="dialog"][aria-modal="true"]'));
-      if(dlg){ c = Array.from(dlg.querySelectorAll('*')).find(isScrollableY) || dlg; }
-    }
+    if(!c){ const dlg = seed.closest && (seed.closest('[role="dialog"],[aria-modal="true"]') || document.querySelector('[role="dialog"][aria-modal="true"]')); if(dlg){ c = Array.from(dlg.querySelectorAll('*')).find(isScrollableY) || dlg; } }
     sc = c || document.scrollingElement || document.body;
 
     let detected = detectPanelType(sc);
-    if(detected==='unknown'){
-      toast('Could not recognize this panel. Make sure the dialog is open.', 1800);
-      return;
-    }
-    if(detected!==activeMode){
-      if(detected==='likes' || detected==='comments'){ setActiveMode(detected); toast('Detected '+detected+' panel — switching mode.', 1200); }
-      if(detected==='shares' && activeMode!=='shares'){ setActiveMode('shares'); toast('Detected shares panel — switching.', 1200); }
-    }
+    if(detected==='unknown'){ toast('Could not recognize this panel. Make sure the dialog is open.', 1800); return; }
+    if(detected!==activeMode){ setActiveMode(detected); toast('Detected '+detected+' panel — switching mode.', 1200); }
 
     const myToken = ++runToken;
-    setUIBusy(true, 'Collecting…');
+    setUIBusy(true,'Collecting…');
 
-    // lock post URL/key for this run
-    POST_URL = location.href;
-    POST_KEY = postKeyFromURL(POST_URL);
-    setPostKeyLabel();
+    POST_URL = location.href; POST_KEY = postKeyFromURL(POST_URL); setPostKeyLabel();
 
     if(activeMode==='likes')        await runLikes(myToken);
     else if(activeMode==='comments') await runComments(myToken);
     else                             await runShares(myToken);
 
-    if(myToken !== runToken){ setUIBusy(false, 'Interrupted'); return; }
-    setUIBusy(false, 'Ready');
+    if(myToken !== runToken){ setUIBusy(false,'Interrupted'); return; }
+    setUIBusy(false,'Ready');
 
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
     if(hasAll){ toast('All three collected — downloading merged CSV…', 1400); downloadMerged(); }
@@ -386,7 +226,7 @@
   ui.querySelector('#fbp-reset').addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
   ui.querySelector('#fbp-exit').addEventListener('click', ()=>ui.remove());
 
-  // ===== Runners (guards + fast-finish) =====
+  // ===== Runners (same logic with quick-finish) =====
   async function runLikes(token){
     if(detectPanelType(sc) !== 'likes'){ toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
@@ -398,8 +238,7 @@
         const url=normalizeFB(a.getAttribute('href')); if(!url) return;
         if(seenRun.has(url)) return; seenRun.add(url);
         const name=getNameFromAnchor(a);
-        const before = store.size;
-        upsertRow(name,url,'likes');
+        const before = store.size; upsertRow(name,url,'likes');
         if(store.size>before){ grew=true; found++; }
       });
       counts.likes = Array.from(store.values()).filter(r=>r.Like==='Yes').length;
@@ -413,11 +252,9 @@
   }
 
   async function runComments(token){
-    // Must be a comments panel, and not a shares dialog
-    const dlg = getDialog(sc); const text = dialogText(dlg);
+    const dlg=getDialog(sc); const text=dialogText(dlg);
     if(/\bshare\b/.test(text) || /\bshared? this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
     if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
-
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<320 && stable<6;i++){
       if(token !== runToken) return;
@@ -427,11 +264,9 @@
         const url=normalizeFB(a.getAttribute('href')); if(!url) return;
         if(seenRun.has(url)) return; seenRun.add(url);
         const name=getNameFromAnchor(a);
-        const before = store.size;
-        upsertRow(name,url,'comments');
+        const before = store.size; upsertRow(name,url,'comments');
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
-      // expand threads conservatively
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
         const t=(b.innerText||'').toLowerCase();
         if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')) b.click();
@@ -448,21 +283,18 @@
   }
 
   async function runShares(token){
-    // Only proceed if dialog explicitly says "share / shared this"
-    const dlg = getDialog(sc); const text = dialogText(dlg);
+    const dlg=getDialog(sc); const text=dialogText(dlg);
     if(!(/\b(people who )?shared? this\b/.test(text) || /\bshares?\b/.test(text))){ toast('This panel isn’t the Shares list; aborting shares run.', 1800); return; }
-
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<280 && stable<6;i++){
       if(token !== runToken) return;
       let grew=false, found=0;
-      const as = sharerAnchors();
+      const as=sharerAnchors();
       as.forEach(a=>{
         const url=normalizeFB(a.getAttribute('href')); if(!url) return;
         if(seenRun.has(url)) return; seenRun.add(url);
         const name=getNameFromAnchor(a);
-        const before = store.size;
-        upsertRow(name,url,'shares');
+        const before = store.size; upsertRow(name,url,'shares');
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
       counts.shares = Array.from(store.values()).filter(r=>r.Share==='Yes').length;
@@ -476,6 +308,6 @@
     maybeRender(true);
   }
 
-  // initial render
+  // initial preview
   renderPreview();
 })();
