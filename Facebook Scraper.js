@@ -216,48 +216,66 @@
 
   // ===== Run control (unchanged) =====
   let runToken=0;
-  function setUIBusy(busy,label){ ui.querySelector('#fbp-go').disabled=busy; Object.values(modeButtons).forEach(b=>b.disabled=busy); ui.querySelector('#fbp-go').style.opacity=busy?.7:1; if(label) statusEl.textContent=label; }
+  function setUIBusy(busy, label){
+    const btn = ui.querySelector('#fbp-go');
+    btn.disabled = !!busy;
+    Object.values(modeButtons).forEach(b=>b.disabled = !!busy);
+    btn.style.opacity = busy ? 0.7 : 1;
+    if (label) statusEl.textContent = label;
+  }
 
-  ui.querySelector('#fbp-go').addEventListener('click', async ()=>{
-    toast('Click inside the open panel…', 1400);
-    const ev = await new Promise(res=>{ const h=e=>{document.removeEventListener('click',h,true);res(e)}; document.addEventListener('click',h,true); });
+
+  ui.querySelector('#fbp-go').addEventListener('click', async function(){
+    toast('Click inside the open panel…', 1800);
+  
+    const ev = await new Promise(function(res){
+      const h = function(e){ document.removeEventListener('click', h, true); res(e); };
+      document.addEventListener('click', h, true);
+    });
+  
     const seed = ev.target;
     let c = closestScrollable(seed);
-    if(!c){ const dlg = seed.closest && (seed.closest('[role="dialog"],[aria-modal="true"]') || document.querySelector('[role="dialog"][aria-modal="true"]')); if(dlg){ c = Array.from(dlg.querySelectorAll('*')).find(isScrollableY) || dlg; } }
+    if(!c){
+      const dlg = seed.closest && (seed.closest('[role="dialog"],[aria-modal="true"]') || document.querySelector('[role="dialog"][aria-modal="true"]'));
+      if(dlg){ c = Array.from(dlg.querySelectorAll('*')).find(isScrollableY) || dlg; }
+    }
     sc = c || document.scrollingElement || document.body;
-
+  
+    // ——— Panel detection & mode handling ———
     const detected = detectPanelType(sc);
-    
-    // Auto-switch if we can positively identify a different panel
+  
+    // Auto-switch when we can positively detect a different panel
     if (detected !== 'unknown' && detected !== activeMode) {
       setActiveMode(detected);
       toast('Detected ' + detected + ' panel — switching mode.', 1400);
     }
-    
-    // If we can't tell: allow Likes to proceed (reactions dialog often has no header),
-    // but block others to avoid mis-collection.
+  
+    // If detection is ambiguous, only proceed if user chose Likes (reactions lists often have no title)
     if (detected === 'unknown') {
       if (activeMode === 'likes') {
         toast('Panel looks like Reactions — proceeding as Likes.', 1400);
       } else {
-        toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 1800);
+        toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 2000);
         return;
       }
     }
-
-
+  
+    // lock post URL/key for this run
+    POST_URL = location.href;
+    POST_KEY = postKeyFromURL(POST_URL);
+    postKeyEl.textContent = 'post key: ' + (POST_KEY.length>42 ? (POST_KEY.slice(0,42)+'…') : POST_KEY);
+  
     const myToken = ++runToken;
-    setUIBusy(true,'Collecting…');
-
-    POST_URL = location.href; POST_KEY = postKeyFromURL(POST_URL); setPostKeyLabel();
-
-    if(activeMode==='likes')        await runLikes(myToken);
-    else if(activeMode==='comments') await runComments(myToken);
-    else                             await runShares(myToken);
-
-    if(myToken !== runToken){ setUIBusy(false,'Interrupted'); return; }
-    setUIBusy(false,'Ready');
-
+    setUIBusy(true, 'Collecting…');
+    toast('Panel selected ✓ Collecting…', 1000);
+  
+    if (activeMode === 'likes')        await runLikes(myToken);
+    else if (activeMode === 'comments') await runComments(myToken);
+    else                                 await runShares(myToken);
+  
+    if (myToken !== runToken){ setUIBusy(false); return; }
+    setUIBusy(false);
+  
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
     if(hasAll){ toast('All three collected — downloading merged CSV…', 1400); downloadMerged(); }
     else { toast('Done for this mode ✓'); }
@@ -269,7 +287,11 @@
 
   // ===== Runners (same logic with quick-finish) =====
   async function runLikes(token){
-    if(detectPanelType(sc) !== 'likes'){ toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
+    const kind = detectPanelType(sc);
+    if (kind !== 'likes' && kind !== 'unknown') {
+      toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800);
+      return;
+    }
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
     for(let i=0;i<280 && stable<6;i++){
       if(token !== runToken) return;
