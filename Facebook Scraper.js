@@ -1,4 +1,4 @@
-(async function FB_Export_Persons_UNIFIED_v16(){
+(async function FB_Export_Persons_UNIFIED_v17(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== UI =====
@@ -11,8 +11,10 @@
   });
   ui.innerHTML =
     '<div id="fbp-head" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:move">' +
-      '<div aria-label="Drag" title="Drag" style="width:14px;height:14px;flex:0 0 14px;position:relative">' +
-        '<div style="position:absolute;inset:0;background:radial-gradient(currentColor 1px, transparent 1px) 0 0/4px 4px;opacity:.5"></div>' +
+      '<div aria-label="Drag" title="Drag" style="width:16px;height:16px;flex:0 0 16px;display:grid;grid-template-columns:repeat(3,4px);grid-template-rows:repeat(3,4px);gap:2px;color:#9aa6b2;opacity:.7">' +
+        '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
+        '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
+        '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
       '</div>' +
       '<div style="font-weight:700">FB People Scraper</div>' +
       '<div style="margin-left:auto;display:flex;align-items:center;gap:6px">' +
@@ -53,7 +55,7 @@
     '</div>';
   document.body.appendChild(ui);
 
-  // — drag (single handle) + persist
+  // drag + persist
   (function(){
     const head = ui.querySelector('#fbp-head');
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
@@ -125,13 +127,13 @@
     t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),ms);
   }
 
-  // ===== Storage (per-post) =====
+  // storage / URL
   let POST_URL = location.href;
   function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); } catch(e){ return u; } }
   let POST_KEY = postKeyFromURL(POST_URL);
   function setPostKeyLabel(){
     postKeyEl.textContent = (POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'): POST_KEY);
-    postKeyEl.title = POST_KEY; // hover shows full URL
+    postKeyEl.title = POST_KEY;
   }
   setPostKeyLabel();
   ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
@@ -222,38 +224,47 @@
   }
   function sharerAnchors(){
     const sel='[data-ad-rendering-role="profile_name"] a[href], h3 a[href]';
-    return Array.from(sc.querySelectorAll(sel))
-      .filter(a=>{
-        if(!isVisible(a)) return false;
-        if(inMessageBody(a)) return false;
-        if(isCommentArticleNode(a)) return false;
-        const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) return false;
-        const txt=(a.textContent||'').trim(); if(!txt) return false;
-        if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) return false;
-        const ok = a.closest('[data-ad-rendering-role="profile_name"]') || a.closest('h1,h2,h3');
-        return !!ok;
-      });
+    return Array.from(sc.querySelectorAll(sel)).filter(a=>{
+      if(!isVisible(a)) return false;
+      if(inMessageBody(a)) return false;
+      if(isCommentArticleNode(a)) return false;
+      const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) return false;
+      const txt=(a.textContent||'').trim(); if(!txt) return false;
+      if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) return false;
+      const ok = a.closest('[data-ad-rendering-role="profile_name"]') || a.closest('h1,h2,h3');
+      return !!ok;
+    });
   }
 
-  // ===== Panel detection (stricter & order-changed)
+  // ===== Panel detection (robust)
+  function getDialog(container){
+    return container.closest && container.closest('[role="dialog"]');
+  }
+  function dialogText(dlg){
+    if(!dlg) return '';
+    const aria = (dlg.getAttribute('aria-label')||'');
+    const head = Array.from(dlg.querySelectorAll('h1,h2,h3,[role="heading"]'))
+                  .slice(0,2).map(e=>e.textContent||'').join(' ');
+    return (aria+' '+head).toLowerCase();
+  }
   function detectPanelType(container){
-    const dlg = container.closest && container.closest('[role="dialog"]');
-    const label = (dlg?.getAttribute('aria-label')||'').toLowerCase();
+    const dlg = getDialog(container);
+    const text = dialogText(dlg);
 
-    // 1) Trust explicit labels first
-    if(/\b(reaction|reacted|like|reactions)\b/.test(label)) return 'likes';
-    if(/\bcomment\b/.test(label)) return 'comments';
-    if(/\bshare\b/.test(label))   return 'shares';
+    // Shares first (explicit phrases)
+    if(/\b(people who )?shared? this\b/.test(text) || /\bshares?\b/.test(text)) return 'shares';
+    // Reactions / Likes
+    if(/\b(reaction|reacted|likes?)\b/.test(text)) return 'likes';
+    // Comments
+    if(/\bcomments?\b/.test(text)) return 'comments';
 
-    // 2) Structural signals
+    // Structural hints (only when not in a Shares dialog)
     if(container.querySelector && container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
-    if(dlg && dlg.querySelector('[role="tablist"] [role="tab"]')) return 'likes';
 
-    // Important: DO NOT infer "shares" without an explicit label
     return 'unknown';
   }
 
-  // ===== Storage ops =====
+  // storage ops
   function updateStats(){ likeC.textContent=counts.likes; commentC.textContent=counts.comments; shareC.textContent=counts.shares; }
   function upsertRow(name,url,mode){
     if(!name||!url) return;
@@ -277,18 +288,19 @@
     const now = Date.now();
     if(force || now - lastRender > 900){ renderPreview(); lastRender = now; } else { updateStats(); }
   }
+
+  // Preview (cleaner headers; Publication_URL removed here for clarity)
   function renderPreview(){
     const rows = Array.from(store.values());
     let head =
-      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:11px">' +
         '<thead>' +
           '<tr style="position:sticky;top:0;background:#10131a">' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Person_Name</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Person</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Like</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Share</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Comment</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Publication_URL</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person_Name</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Like</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Share</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Comment</th>' +
           '</tr>' +
         '</thead><tbody>';
     let body = '';
@@ -296,11 +308,10 @@
       const r=rows[i];
       body += '<tr>' +
         '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escapeHTML(r.Person_Name)+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:normal;overflow-wrap:anywhere"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff">'+shorten(r.Person,40)+'</a></td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Like+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Share+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Comment+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:normal;overflow-wrap:anywhere"><a href="'+r.Publication_URL+'" target="_blank" style="color:#8ab4ff" title="'+r.Publication_URL+'">'+shorten(r.Publication_URL,42)+'</a></td>' +
       '</tr>';
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
@@ -341,18 +352,14 @@
     }
     sc = c || document.scrollingElement || document.body;
 
-    // Strict detect: never auto-switch to "shares" unless label says share
     let detected = detectPanelType(sc);
     if(detected==='unknown'){
       toast('Could not recognize this panel. Make sure the dialog is open.', 1800);
       return;
     }
     if(detected!==activeMode){
-      // Only auto-switch if moving TO likes or comments. Never auto-switch to shares.
-      if(detected==='likes' || detected==='comments'){
-        setActiveMode(detected);
-        toast('Detected '+detected+' panel — switching mode.', 1200);
-      }
+      if(detected==='likes' || detected==='comments'){ setActiveMode(detected); toast('Detected '+detected+' panel — switching mode.', 1200); }
+      if(detected==='shares' && activeMode!=='shares'){ setActiveMode('shares'); toast('Detected shares panel — switching.', 1200); }
     }
 
     const myToken = ++runToken;
@@ -379,11 +386,11 @@
   ui.querySelector('#fbp-reset').addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
   ui.querySelector('#fbp-exit').addEventListener('click', ()=>ui.remove());
 
-  // ===== Runners (with hard guards + fast finish on empties) =====
+  // ===== Runners (guards + fast-finish) =====
   async function runLikes(token){
     if(detectPanelType(sc) !== 'likes'){ toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, passes=0;
-    for(;passes<300 && stable<6;passes++){
+    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
+    for(let i=0;i<280 && stable<6;i++){
       if(token !== runToken) return;
       let grew=false, found=0;
       likeItems().forEach(it=>{
@@ -396,24 +403,26 @@
         if(store.size>before){ grew=true; found++; }
       });
       counts.likes = Array.from(store.values()).filter(r=>r.Like==='Yes').length;
-      if(found===0){ emptyPass++; if(emptyPass>=2) break; } else emptyPass=0;
+      if(found===0){ if(++emptyPass>=2) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
       await sleep(520);
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
     }
-    if(passes<=2 && counts.likes===0) toast('No reactions found in this panel.', 1400);
     maybeRender(true);
   }
 
   async function runComments(token){
-    if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting comments run.', 1800); return; }
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, passes=0, anyFound=false;
-    for(;passes<320 && stable<6;passes++){
+    // Must be a comments panel, and not a shares dialog
+    const dlg = getDialog(sc); const text = dialogText(dlg);
+    if(/\bshare\b/.test(text) || /\bshared? this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
+    if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
+
+    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
+    for(let i=0;i<320 && stable<6;i++){
       if(token !== runToken) return;
       let grew=false, found=0;
-      const arts = commentArticles();
-      arts.forEach(art=>{
+      commentArticles().forEach(art=>{
         const a = pickCommentAnchor(art); if(!a) return;
         const url=normalizeFB(a.getAttribute('href')); if(!url) return;
         if(seenRun.has(url)) return; seenRun.add(url);
@@ -428,7 +437,7 @@
         if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')) b.click();
       });
       counts.comments = Array.from(store.values()).filter(r=>r.Comment==='Yes').length;
-      if(found===0){ emptyPass++; if(emptyPass>=2) break; } else emptyPass=0;
+      if(found===0){ if(++emptyPass>=2) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
       await sleep(760);
@@ -439,13 +448,12 @@
   }
 
   async function runShares(token){
-    // Hard rule: only proceed if explicit dialog label says "share"
-    const dlg = sc.closest && sc.closest('[role="dialog"]');
-    const label = (dlg?.getAttribute('aria-label')||'').toLowerCase();
-    if(!/\bshare\b/.test(label)){ toast('This panel isn’t the Shares list; aborting shares run.', 1800); return; }
+    // Only proceed if dialog explicitly says "share / shared this"
+    const dlg = getDialog(sc); const text = dialogText(dlg);
+    if(!(/\b(people who )?shared? this\b/.test(text) || /\bshares?\b/.test(text))){ toast('This panel isn’t the Shares list; aborting shares run.', 1800); return; }
 
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, passes=0, anyFound=false;
-    for(;passes<300 && stable<6;passes++){
+    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
+    for(let i=0;i<280 && stable<6;i++){
       if(token !== runToken) return;
       let grew=false, found=0;
       const as = sharerAnchors();
@@ -458,7 +466,7 @@
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
       counts.shares = Array.from(store.values()).filter(r=>r.Share==='Yes').length;
-      if(found===0){ emptyPass++; if(emptyPass>=2) break; } else emptyPass=0;
+      if(found===0){ if(++emptyPass>=2) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
       await sleep(520);
@@ -468,36 +476,6 @@
     maybeRender(true);
   }
 
-  // initial preview
-  function renderPreview(){
-    const rows = Array.from(store.values());
-    let head =
-      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
-        '<thead>' +
-          '<tr style="position:sticky;top:0;background:#10131a">' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Person_Name</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Person</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Like</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Share</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Comment</th>' +
-            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Publication_URL</th>' +
-          '</tr>' +
-        '</thead><tbody>';
-    let body = '';
-    for(let i=0;i<Math.min(rows.length,50);i++){
-      const r=rows[i];
-      body += '<tr>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escapeHTML(r.Person_Name)+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:normal;overflow-wrap:anywhere"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff">'+shorten(r.Person,40)+'</a></td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Like+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Share+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Comment+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:normal;overflow-wrap:anywhere"><a href="'+r.Publication_URL+'" target="_blank" style="color:#8ab4ff" title="'+r.Publication_URL+'">'+shorten(r.Publication_URL,42)+'</a></td>' +
-      '</tr>';
-    }
-    prevBox.innerHTML = head + body + '</tbody></table>';
-    updateStats();
-  }
+  // initial render
   renderPreview();
-
 })();
