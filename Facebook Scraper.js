@@ -37,10 +37,10 @@
           '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">👍<span>Likes</span></div><div id="fbp-likec" style="font-weight:700">0</div>' +
         '</div>' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
-          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">💬<span>Comments</span></div><div id="fbp-commentc" style="font-weight:700">0</div>' +
+          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">↗<span>Shares</span></div><div id="fbp-sharec" style="font-weight:700">0</div>' +
         '</div>' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
-          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">↗<span>Shares</span></div><div id="fbp-sharec" style="font-weight:700">0</div>' +
+          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">💬<span>Comments</span></div><div id="fbp-commentc" style="font-weight:700">0</div>' +
         '</div>' +
       '</div>' +
       '<div>' +
@@ -84,7 +84,7 @@
   })();
 
   // ===== modes =====
-  const modes=[{key:'likes',label:'Likes'},{key:'comments',label:'Comments'},{key:'shares',label:'Shares'}];
+  const modes=[{key:'likes',label:'Likes'},{key:'shares',label:'Shares'},{key:'comments',label:'Comments'}];
   const modeWrap=ui.querySelector('#fbp-modes'); let activeMode='likes'; const modeButtons={};
   function setActiveMode(k){ activeMode=k; Object.values(modeButtons).forEach(el=>el.style.outline=''); if(modeButtons[k]) modeButtons[k].style.outline='2px solid #3b7cff'; }
   modes.forEach(m=>{ const b=document.createElement('button'); Object.assign(b.style,{padding:'6px 10px',borderRadius:'8px',border:'1px solid #384155',background:'#171a20',color:'#e6e6e6',cursor:'pointer'}); b.textContent=m.label; b.dataset.mode=m.key; b.addEventListener('click',()=>setActiveMode(m.key)); modeWrap.appendChild(b); modeButtons[m.key]=b; });
