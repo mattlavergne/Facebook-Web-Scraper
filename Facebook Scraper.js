@@ -98,6 +98,37 @@
   let POST_KEY=postKeyFromURL(POST_URL);
   function setPostKeyLabel(){ postKeyEl.textContent=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY); postKeyEl.title=POST_KEY; }
   setPostKeyLabel();
+  (function(){
+    function refreshPostKey(){
+      POST_URL = location.href;
+      POST_KEY = postKeyFromURL(POST_URL);
+      setPostKeyLabel();
+    }
+  
+    const _push = history.pushState;
+    const _replace = history.replaceState;
+  
+    history.pushState = function(){
+      const r = _push.apply(this, arguments);
+      refreshPostKey();
+      return r;
+    };
+    history.replaceState = function(){
+      const r = _replace.apply(this, arguments);
+      refreshPostKey();
+      return r;
+    };
+    window.addEventListener('popstate', refreshPostKey);
+  
+    // Safety poll: FB sometimes updates URL without firing history events
+    let last = location.href;
+    setInterval(function(){
+      if (location.href !== last){
+        last = location.href;
+        refreshPostKey();
+      }
+    }, 1000);
+  })();
   ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }catch{ toast('Could not copy URL'); }});
 
   const store=new Map(); const counts={likes:0,comments:0,shares:0};
