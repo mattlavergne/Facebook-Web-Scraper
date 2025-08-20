@@ -124,13 +124,36 @@
   function getDialog(container){ return container.closest && container.closest('[role="dialog"]'); }
   function dialogText(dlg){ if(!dlg) return ''; const aria=(dlg.getAttribute('aria-label')||''); const head=Array.from(dlg.querySelectorAll('h1,h2,h3,[role="heading"]')).slice(0,2).map(e=>e.textContent||'').join(' '); return (aria+' '+head).toLowerCase(); }
   function detectPanelType(container){
-    const dlg=getDialog(container); const text=dialogText(dlg);
-    if(/\b(people who )?shared? this\b/.test(text) || /\bshares?\b/.test(text)) return 'shares';
-    if(/\b(reaction|reacted|likes?)\b/.test(text)) return 'likes';
-    if(/\bcomments?\b/.test(text)) return 'comments';
-    if(container.querySelector && container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
+    const dlg = container.closest && container.closest('[role="dialog"]');
+    const label = (dlg?.getAttribute('aria-label')||'').toLowerCase();
+  
+    // Comments: very reliable signal
+    if (container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
+    if (label.includes('comment')) return 'comments';
+  
+    // Shares: look for explicit wording anywhere in the dialog
+    if (label.includes('share')) return 'shares';
+    if (dlg && Array.from(dlg.querySelectorAll('*')).some(el => /people who shared|shared this/i.test(el.textContent||''))) {
+      return 'shares';
+    }
+  
+    // Likes/Reactions: no header text; look for the reaction tabs (All/Like/Love…)
+    if (dlg) {
+      const tablist = dlg.querySelector('[role="tablist"]');
+      if (tablist) {
+        const hasAllTab = Array.from(tablist.querySelectorAll('[role="tab"]'))
+          .some(t => /all/i.test(t.textContent||''));
+        if (hasAllTab) return 'likes';
+      }
+    }
+  
+    // Fallback heuristic: a long list of listitems with no comment articles visible -> likes
+    const manyListItems = container.querySelectorAll('[role="listitem"]').length >= 3;
+    if (manyListItems && !container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'likes';
+  
     return 'unknown';
   }
+
 
   function updateStats(){ likeC.textContent=counts.likes; commentC.textContent=counts.comments; shareC.textContent=counts.shares; }
   function upsertRow(name,url,mode){
@@ -203,9 +226,25 @@
     if(!c){ const dlg = seed.closest && (seed.closest('[role="dialog"],[aria-modal="true"]') || document.querySelector('[role="dialog"][aria-modal="true"]')); if(dlg){ c = Array.from(dlg.querySelectorAll('*')).find(isScrollableY) || dlg; } }
     sc = c || document.scrollingElement || document.body;
 
-    let detected = detectPanelType(sc);
-    if(detected==='unknown'){ toast('Could not recognize this panel. Make sure the dialog is open.', 1800); return; }
-    if(detected!==activeMode){ setActiveMode(detected); toast('Detected '+detected+' panel — switching mode.', 1200); }
+    const detected = detectPanelType(sc);
+    
+    // Auto-switch if we can positively identify a different panel
+    if (detected !== 'unknown' && detected !== activeMode) {
+      setActiveMode(detected);
+      toast('Detected ' + detected + ' panel — switching mode.', 1400);
+    }
+    
+    // If we can't tell: allow Likes to proceed (reactions dialog often has no header),
+    // but block others to avoid mis-collection.
+    if (detected === 'unknown') {
+      if (activeMode === 'likes') {
+        toast('Panel looks like Reactions — proceeding as Likes.', 1400);
+      } else {
+        toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 1800);
+        return;
+      }
+    }
+
 
     const myToken = ++runToken;
     setUIBusy(true,'Collecting…');
