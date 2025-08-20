@@ -34,13 +34,13 @@
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between">' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
-          '<div style="opacity:.65;font-size:11px">Likes</div><div id="fbp-likec" style="font-weight:700">0</div>' +
+          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">👍<span>Likes</span></div><div id="fbp-likec" style="font-weight:700">0</div>' +
         '</div>' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
-          '<div style="opacity:.65;font-size:11px">Comments</div><div id="fbp-commentc" style="font-weight:700">0</div>' +
+          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">💬<span>Comments</span></div><div id="fbp-commentc" style="font-weight:700">0</div>' +
         '</div>' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
-          '<div style="opacity:.65;font-size:11px">Shares</div><div id="fbp-sharec" style="font-weight:700">0</div>' +
+          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">↗<span>Shares</span></div><div id="fbp-sharec" style="font-weight:700">0</div>' +
         '</div>' +
       '</div>' +
       '<div>' +
