@@ -1,4 +1,4 @@
-(async function FB_Export_Persons_UNIFIED_v15(){
+(async function FB_Export_Persons_UNIFIED_v16(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== UI =====
@@ -10,12 +10,15 @@
     zIndex:2147483647, padding:'12px'
   });
   ui.innerHTML =
-    '<div id="fbp-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:move">' +
-      '<div style="font-weight:700;display:flex;align-items:center;gap:6px">' +
-        '<span style="display:inline-block; width:12px; height:12px; border:1px solid #3b7cff; border-radius:3px"></span>' +
-        'FB People Scraper' +
+    '<div id="fbp-head" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:move">' +
+      '<div aria-label="Drag" title="Drag" style="width:14px;height:14px;flex:0 0 14px;position:relative">' +
+        '<div style="position:absolute;inset:0;background:radial-gradient(currentColor 1px, transparent 1px) 0 0/4px 4px;opacity:.5"></div>' +
       '</div>' +
-      '<div id="fbp-postkey" style="margin-left:auto;opacity:.7;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title=""></div>' +
+      '<div style="font-weight:700">FB People Scraper</div>' +
+      '<div style="margin-left:auto;display:flex;align-items:center;gap:6px">' +
+        '<button id="fbp-copyurl" title="Copy post URL" style="border:1px solid #2a2f3a;background:#141823;color:#dfe3ee;border-radius:6px;padding:4px 6px;cursor:pointer">Copy URL</button>' +
+        '<div id="fbp-postkey" style="opacity:.75;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title=""></div>' +
+      '</div>' +
     '</div>' +
     '<div style="display:grid;gap:8px">' +
       '<div>' +
@@ -25,7 +28,7 @@
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">2) Select panel & start</div>' +
         '<button id="fbp-go" style="width:100%;padding:10px;border:1px solid #3b7cff;background:#2353ff;color:white;border-radius:8px;cursor:pointer;font-weight:600">Select Panel & Start</button>' +
-        '<div style="font-size:11px;opacity:.6;margin-top:4px">Open the Likes / Comments / Shares dialog first, then click this and click inside it.</div>' +
+        '<div id="fbp-status" style="font-size:11px;opacity:.75;margin-top:6px">Ready</div>' +
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between">' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
@@ -109,10 +112,16 @@
   const commentC  = ui.querySelector('#fbp-commentc');
   const shareC    = ui.querySelector('#fbp-sharec');
   const postKeyEl = ui.querySelector('#fbp-postkey');
+  const statusEl  = ui.querySelector('#fbp-status');
 
   function toast(msg, ms=1600){
     const t=document.createElement('div');
-    Object.assign(t.style,{position:'fixed',top:'14px',left:'50%',transform:'translateX(-50%)',background:'#111',color:'#fff',padding:'8px 12px',borderRadius:'8px',zIndex:2147483647,boxShadow:'0 8px 20px rgba(0,0,0,.4)'});
+    Object.assign(t.style,{
+      position:'fixed', right:'18px', bottom:'18px',
+      background:'#1b5cff', color:'#fff', padding:'10px 12px',
+      borderRadius:'10px', zIndex:2147483647, boxShadow:'0 8px 22px rgba(0,0,0,.35)',
+      font:'12px system-ui, -apple-system, Segoe UI, Roboto'
+    });
     t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),ms);
   }
 
@@ -122,9 +131,12 @@
   let POST_KEY = postKeyFromURL(POST_URL);
   function setPostKeyLabel(){
     postKeyEl.textContent = (POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'): POST_KEY);
-    postKeyEl.title = POST_KEY;
+    postKeyEl.title = POST_KEY; // hover shows full URL
   }
   setPostKeyLabel();
+  ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }catch{ toast('Could not copy URL'); }
+  });
 
   const store = new Map();
   const counts = {likes:0, comments:0, shares:0};
@@ -223,29 +235,21 @@
       });
   }
 
-  // ===== Panel detection (safer) =====
+  // ===== Panel detection (stricter & order-changed)
   function detectPanelType(container){
     const dlg = container.closest && container.closest('[role="dialog"]');
     const label = (dlg?.getAttribute('aria-label')||'').toLowerCase();
 
-    // If in a dialog, trust its label if present
-    if(dlg){
-      if(/\b(reaction|reacted|like|reactions)\b/.test(label)) return 'likes';
-      if(/\bshare\b/.test(label)) return 'shares';
-    }
+    // 1) Trust explicit labels first
+    if(/\b(reaction|reacted|like|reactions)\b/.test(label)) return 'likes';
+    if(/\bcomment\b/.test(label)) return 'comments';
+    if(/\bshare\b/.test(label))   return 'shares';
 
-    // Likes: dialog with reaction chips / tabs (common UI)
+    // 2) Structural signals
+    if(container.querySelector && container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
     if(dlg && dlg.querySelector('[role="tablist"] [role="tab"]')) return 'likes';
 
-    // Comments: presence of comment articles inside selected container
-    if(container.querySelector && container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
-
-    // Shares: only consider if in a dialog (prevents false positives on the main feed)
-    if(dlg){
-      const hasShareHdr = container.querySelector('[data-ad-rendering-role="profile_name"] a[href], h3 a[href]');
-      if(hasShareHdr) return 'shares';
-    }
-
+    // Important: DO NOT infer "shares" without an explicit label
     return 'unknown';
   }
 
@@ -296,7 +300,7 @@
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Like+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Share+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #222">'+r.Comment+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:normal;overflow-wrap:anywhere"><a href="'+r.Publication_URL+'" target="_blank" style="color:#8ab4ff">'+shorten(r.Publication_URL,42)+'</a></td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;white-space:normal;overflow-wrap:anywhere"><a href="'+r.Publication_URL+'" target="_blank" style="color:#8ab4ff" title="'+r.Publication_URL+'">'+shorten(r.Publication_URL,42)+'</a></td>' +
       '</tr>';
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
@@ -317,14 +321,15 @@
 
   // ===== Run control =====
   let runToken = 0;
-  function setUIBusy(busy){
+  function setUIBusy(busy, label){
     ui.querySelector('#fbp-go').disabled = busy;
     Object.values(modeButtons).forEach(b=>b.disabled=busy);
     ui.querySelector('#fbp-go').style.opacity = busy ? .7 : 1;
+    if(label) statusEl.textContent = label;
   }
 
   ui.querySelector('#fbp-go').addEventListener('click', async ()=>{
-    toast('Click inside the open panel…', 1800);
+    toast('Click inside the open panel…', 1400);
     const ev = await new Promise(res=>{
       const h=e=>{document.removeEventListener('click',h,true);res(e)}; document.addEventListener('click',h,true);
     });
@@ -336,15 +341,22 @@
     }
     sc = c || document.scrollingElement || document.body;
 
+    // Strict detect: never auto-switch to "shares" unless label says share
     let detected = detectPanelType(sc);
-    if(detected!=='unknown' && detected!==activeMode){
-      setActiveMode(detected);
-      toast('Detected '+detected+' panel — switching mode.', 1400);
+    if(detected==='unknown'){
+      toast('Could not recognize this panel. Make sure the dialog is open.', 1800);
+      return;
+    }
+    if(detected!==activeMode){
+      // Only auto-switch if moving TO likes or comments. Never auto-switch to shares.
+      if(detected==='likes' || detected==='comments'){
+        setActiveMode(detected);
+        toast('Detected '+detected+' panel — switching mode.', 1200);
+      }
     }
 
     const myToken = ++runToken;
-    setUIBusy(true);
-    toast('Panel selected ✓ Collecting…', 1000);
+    setUIBusy(true, 'Collecting…');
 
     // lock post URL/key for this run
     POST_URL = location.href;
@@ -355,8 +367,8 @@
     else if(activeMode==='comments') await runComments(myToken);
     else                             await runShares(myToken);
 
-    if(myToken !== runToken){ setUIBusy(false); return; }
-    setUIBusy(false);
+    if(myToken !== runToken){ setUIBusy(false, 'Interrupted'); return; }
+    setUIBusy(false, 'Ready');
 
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
     if(hasAll){ toast('All three collected — downloading merged CSV…', 1400); downloadMerged(); }
@@ -367,11 +379,11 @@
   ui.querySelector('#fbp-reset').addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
   ui.querySelector('#fbp-exit').addEventListener('click', ()=>ui.remove());
 
-  // ===== Runners (with hard guards) =====
+  // ===== Runners (with hard guards + fast finish on empties) =====
   async function runLikes(token){
-    if(detectPanelType(sc) !== 'likes'){ toast('This panel doesn’t look like the Reactions list; aborting likes run.', 2000); return; }
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
-    for(let i=0;i<360 && stable<6;i++){
+    if(detectPanelType(sc) !== 'likes'){ toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
+    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, passes=0;
+    for(;passes<300 && stable<6;passes++){
       if(token !== runToken) return;
       let grew=false, found=0;
       likeItems().forEach(it=>{
@@ -387,26 +399,28 @@
       if(found===0){ emptyPass++; if(emptyPass>=2) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
-      await sleep(550);
+      await sleep(520);
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
     }
+    if(passes<=2 && counts.likes===0) toast('No reactions found in this panel.', 1400);
     maybeRender(true);
   }
 
   async function runComments(token){
-    if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting comments run.', 2000); return; }
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
-    for(let i=0;i<380 && stable<6;i++){
+    if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting comments run.', 1800); return; }
+    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, passes=0, anyFound=false;
+    for(;passes<320 && stable<6;passes++){
       if(token !== runToken) return;
       let grew=false, found=0;
-      commentArticles().forEach(art=>{
+      const arts = commentArticles();
+      arts.forEach(art=>{
         const a = pickCommentAnchor(art); if(!a) return;
         const url=normalizeFB(a.getAttribute('href')); if(!url) return;
         if(seenRun.has(url)) return; seenRun.add(url);
         const name=getNameFromAnchor(a);
         const before = store.size;
         upsertRow(name,url,'comments');
-        if(store.size>before){ grew=true; found++; }
+        if(store.size>before){ grew=true; found++; anyFound=true; }
       });
       // expand threads conservatively
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
@@ -417,37 +431,73 @@
       if(found===0){ emptyPass++; if(emptyPass>=2) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
-      await sleep(800);
+      await sleep(760);
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
     }
+    if(!anyFound) toast('No comments found in this panel.', 1400);
     maybeRender(true);
   }
 
   async function runShares(token){
-    if(detectPanelType(sc) !== 'shares'){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 2000); return; }
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
-    for(let i=0;i<360 && stable<6;i++){
+    // Hard rule: only proceed if explicit dialog label says "share"
+    const dlg = sc.closest && sc.closest('[role="dialog"]');
+    const label = (dlg?.getAttribute('aria-label')||'').toLowerCase();
+    if(!/\bshare\b/.test(label)){ toast('This panel isn’t the Shares list; aborting shares run.', 1800); return; }
+
+    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, passes=0, anyFound=false;
+    for(;passes<300 && stable<6;passes++){
       if(token !== runToken) return;
       let grew=false, found=0;
-      sharerAnchors().forEach(a=>{
+      const as = sharerAnchors();
+      as.forEach(a=>{
         const url=normalizeFB(a.getAttribute('href')); if(!url) return;
         if(seenRun.has(url)) return; seenRun.add(url);
         const name=getNameFromAnchor(a);
         const before = store.size;
         upsertRow(name,url,'shares');
-        if(store.size>before){ grew=true; found++; }
+        if(store.size>before){ grew=true; found++; anyFound=true; }
       });
       counts.shares = Array.from(store.values()).filter(r=>r.Share==='Yes').length;
       if(found===0){ emptyPass++; if(emptyPass>=2) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
-      await sleep(550);
+      await sleep(520);
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
     }
+    if(!anyFound) toast('No shares found in this panel.', 1400);
     maybeRender(true);
   }
 
   // initial preview
+  function renderPreview(){
+    const rows = Array.from(store.values());
+    let head =
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
+        '<thead>' +
+          '<tr style="position:sticky;top:0;background:#10131a">' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Person_Name</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Person</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Like</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Share</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Comment</th>' +
+            '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344">Publication_URL</th>' +
+          '</tr>' +
+        '</thead><tbody>';
+    let body = '';
+    for(let i=0;i<Math.min(rows.length,50);i++){
+      const r=rows[i];
+      body += '<tr>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escapeHTML(r.Person_Name)+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;white-space:normal;overflow-wrap:anywhere"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff">'+shorten(r.Person,40)+'</a></td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Like+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Share+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Comment+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;white-space:normal;overflow-wrap:anywhere"><a href="'+r.Publication_URL+'" target="_blank" style="color:#8ab4ff" title="'+r.Publication_URL+'">'+shorten(r.Publication_URL,42)+'</a></td>' +
+      '</tr>';
+    }
+    prevBox.innerHTML = head + body + '</tbody></table>';
+    updateStats();
+  }
   renderPreview();
 
 })();
