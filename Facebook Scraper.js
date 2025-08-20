@@ -154,6 +154,25 @@
 
   function getDialog(container){ return container.closest && container.closest('[role="dialog"]'); }
   function dialogText(dlg){ if(!dlg) return ''; const aria=(dlg.getAttribute('aria-label')||''); const head=Array.from(dlg.querySelectorAll('h1,h2,h3,[role="heading"]')).slice(0,2).map(e=>e.textContent||'').join(' '); return (aria+' '+head).toLowerCase(); }
+  function isSharesPanel(container){
+    const dlg = getDialog(container);
+    const label = (dlg?.getAttribute('aria-label')||'').toLowerCase();
+    if (/\b(people who )?shared?\s+(this|your post)\b/i.test(label)) return true;
+  
+    const heads = dlg
+      ? Array.from(dlg.querySelectorAll('h1,h2,h3,[role="heading"]'))
+          .map(e => (e.textContent||'').toLowerCase())
+          .join(' ')
+      : '';
+    if (/(people who shared|shared this|shares)/i.test(heads)) return true;
+  
+    // If any comment articles are present, it's not the shares list.
+    if (container.querySelector('[role="article"][aria-label^="Comment by "]')) return false;
+  
+    // Structural probe: if we can find valid sharer anchors, treat as shares.
+    return sharerAnchors().length > 0;
+  }
+
   function detectPanelType(container){
     const dlg = container.closest && container.closest('[role="dialog"]');
     const label = (dlg?.getAttribute('aria-label')||'').toLowerCase();
@@ -162,11 +181,9 @@
     if (container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
     if (label.includes('comment')) return 'comments';
   
-    // Shares: look for explicit wording anywhere in the dialog
-    if (label.includes('share')) return 'shares';
-    if (dlg && Array.from(dlg.querySelectorAll('*')).some(el => /people who shared|shared this/i.test(el.textContent||''))) {
-      return 'shares';
-    }
+    // Shares
+    if (isSharesPanel(container)) return 'shares';
+
   
     // Likes/Reactions: no header text; look for the reaction tabs (All/Like/Love…)
     if (dlg) {
@@ -378,13 +395,12 @@
   }
 
   async function runShares(token){
-    const dlg=getDialog(sc); const text=dialogText(dlg);
-    if(!(/\b(people who )?shared? this\b/.test(text) || /\bshares?\b/.test(text))){ toast('This panel isn’t the Shares list; aborting shares run.', 1800); return; }
+    if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<280 && stable<6;i++){
       if(token !== runToken) return;
       let grew=false, found=0;
-      const as=sharerAnchors();
+      const as = sharerAnchors();
       as.forEach(a=>{
         const url=normalizeFB(a.getAttribute('href')); if(!url) return;
         if(seenRun.has(url)) return; seenRun.add(url);
@@ -402,6 +418,7 @@
     if(!anyFound) toast('No shares found in this panel.', 1400);
     maybeRender(true);
   }
+
 
   // initial preview
   renderPreview();
