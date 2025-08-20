@@ -153,29 +153,31 @@
     let head =
       '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
         '<colgroup>' +
-          '<col style="width:42%"><col style="width:38%"><col style="width:6%"><col style="width:6%"><col style="width:8%">' +
+          '<col style="width:44%"><col style="width:36%"><col style="width:6%"><col style="width:6%"><col style="width:8%">' +
         '</colgroup>' +
         '<thead><tr style="position:sticky;top:0;background:#10131a">' +
           '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person_Name</th>' +
           '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person</th>' +
-          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Like</th>' +
-          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Share</th>' +
-          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Comment</th>' +
+          '<th title="Like" aria-label="Like" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">👍</th>' +
+          '<th title="Share" aria-label="Share" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">↗</th>' +
+          '<th title="Comment" aria-label="Comment" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">💬</th>' +
         '</tr></thead><tbody>';
+  
     let body = '';
     for(let i=0;i<Math.min(rows.length,50);i++){
-      const r=rows[i];
+      const r = rows[i];
       body += '<tr>' +
         '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escapeHTML(r.Person_Name)+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Like+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Share+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222">'+r.Comment+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;text-align:center">'+r.Like+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;text-align:center">'+r.Share+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #222;text-align:center">'+r.Comment+'</td>' +
       '</tr>';
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
     updateStats();
   }
+
   function escapeHTML(s){ return (s||'').replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
   function shorten(s,n){ s=String(s||''); return s.length>n ? (s.slice(0,n-1)+'…') : s; }
 
