@@ -2,7 +2,7 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
-  const PAUSE = { likes: 1500, comments: 1500, shares: 1500 }; // ms between scrolls
+  const PAUSE = { likes: 1500, comments: 1500, shares: 1600 }; // ms between scrolls
   const STABLE_LIMIT = 10;   // how many consecutive "no scrollHeight change" cycles before stopping
   const EMPTY_PASSES = 4;    // how many consecutive empty cycles before stopping
 
