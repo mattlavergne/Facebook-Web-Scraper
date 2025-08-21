@@ -1,14 +1,13 @@
-(async function FB_Export_Persons_UNIFIED_v17g(){
+(async function FB_Export_Persons_UNIFIED_v17h(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  // ===== Tuning knobs =====
-  // Slight speed-up vs v17f, still polite
-  const PAUSE = { likes: 2000, comments: 2200, shares: 2400 }; // ms between cycles
+  // ===== Tuning knobs (slightly faster, still polite) =====
+  const PAUSE = { likes: 1900, comments: 2100, shares: 2300 }; // ms between cycles
   const STABLE_LIMIT = 10;
   const EMPTY_PASSES = 4;
 
   // ===== Politeness controls =====
-  const LIMITS = { MAX_ACTIONS_PER_MIN: 26, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
+  const LIMITS = { MAX_ACTIONS_PER_MIN: 28, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
   function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
   async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r, {timeout:1200})); } }
   const now = ()=>performance.now();
@@ -20,7 +19,7 @@
   const Throttle = (()=> {
     let pauseMult = 1;
     let tokens = LIMITS.MAX_ACTIONS_PER_MIN, maxTokens = LIMITS.MAX_ACTIONS_PER_MIN;
-    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 3000); // ~20/min baseline
+    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 3000);
     function spend(){ if(tokens<=0) return false; tokens--; return true; }
     function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 2.0 : 1.20)); }
     function ease(){ pauseMult = Math.max(1, pauseMult * 0.90); }
@@ -32,7 +31,7 @@
     return { spend, backoff, ease, politeWait };
   })();
 
-  // ===== Throttle sensing (sets UI state)
+  // ===== Throttle sensing =====
   let throttleSignal = false;
   (function monitorNetwork(){
     const origFetch = window.fetch;
@@ -50,7 +49,7 @@
     };
   })();
 
-  // ===== Keyframes for indicators
+  // ===== Keyframes =====
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
@@ -60,14 +59,21 @@
     document.head.appendChild(style);
   })();
 
-  // ===== UI =====
-  const ui = document.createElement('div');
+  // Remove old HUD if present
+  document.getElementById('fbp-hud')?.remove();
+
+  // ===== UI panel =====
+  const oldPanel = document.getElementById('fbp-panel');
+  if(oldPanel) oldPanel.remove();
+
+  const ui = Object.assign(document.createElement('div'), { id:'fbp-panel' });
   Object.assign(ui.style, {
     position:'fixed', right:'16px', top:'16px', width:'360px', maxWidth:'360px',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
     zIndex:2147483647, padding:'12px'
   });
+
   ui.innerHTML =
     '<div id="fbp-head" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:move">' +
       '<div aria-label="Drag" title="Drag" style="width:16px;height:16px;flex:0 0 16px;display:grid;grid-template-columns:repeat(3,4px);grid-template-rows:repeat(3,4px);gap:2px;color:#9aa6b2;opacity:.7">' +
@@ -90,6 +96,13 @@
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">2) Select panel & start</div>' +
         '<button id="fbp-go" style="width:100%;padding:10px;border:1px solid #3b7cff;background:#2353ff;color:white;border-radius:8px;cursor:pointer;font-weight:600">Select Panel & Start</button>' +
         '<div id="fbp-status" style="font-size:11px;opacity:.75;margin-top:6px">Ready</div>' +
+        // Inline run bar
+        '<div id="fbp-runind" style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
+          '<div id="fbp-led" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
+          '<div id="fbp-runtext" style="font-size:11px;opacity:.8;min-width:56px">Idle</div>' +
+          '<div style="flex:1;height:6px;background:#1a1f2b;border:1px solid #2b3344;border-radius:6px;overflow:hidden"><div id="fbp-prog" style="height:100%;width:0%;background:#3b7cff"></div></div>' +
+          '<div id="fbp-ops" style="font-size:11px;opacity:.75;width:68px;text-align:right">0/min</div>' +
+        '</div>' +
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between">' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
@@ -107,37 +120,26 @@
         '<div id="fbp-prev" style="max-height:240px;overflow:auto;overflow-x:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+        '<button id="fbp-pause" style="padding:8px;border:1px solid #555;background:#1b1f2a;color:#e6e6e6;border-radius:8px;cursor:pointer">Pause</button>' +
         '<button id="fbp-dl" style="flex:1;padding:8px;border:1px solid #2c8a3f;background:#1d7a31;color:#fff;border-radius:8px;cursor:pointer;font-weight:600">Download Merged CSV</button>' +
-        '<button id="fbp-reset" style="padding:8px;border:1px solid #444;background:#181b22;color:#e6e6e6;border-radius:8px;cursor:pointer">Reset (this post)</button>' +
+        '<button id="fbp-reset" style="padding:8px;border:1px solid #444;background:#181b22;color:#e6e6e6;border-radius:8px;cursor:pointer">Reset</button>' +
         '<button id="fbp-exit" style="padding:8px;border:1px solid #444;background:#181b22;color:#e6e6e6;border-radius:8px;cursor:pointer">Exit</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(ui);
 
-  // Force-add live run bar under status (works even if previous HTML lacked it)
-  const statusEl = ui.querySelector('#fbp-status');
-  (function ensureRunBar(){
-    if(!ui.querySelector('#fbp-runind')){
-      const wrap = document.createElement('div');
-      wrap.id = 'fbp-runind';
-      wrap.style = 'display:flex;align-items:center;gap:8px;margin-top:6px';
-      wrap.innerHTML =
-        '<div id="fbp-led" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
-        '<div id="fbp-runtext" style="font-size:11px;opacity:.8;min-width:56px">Idle</div>' +
-        '<div style="flex:1;height:6px;background:#1a1f2b;border:1px solid #2b3344;border-radius:6px;overflow:hidden"><div id="fbp-prog" style="height:100%;width:0%;background:#3b7cff"></div></div>' +
-        '<div id="fbp-ops" style="font-size:11px;opacity:.75;width:68px;text-align:right">0/min</div>';
-      statusEl.parentElement.insertBefore(wrap, statusEl.nextSibling);
-    }
-  })();
-
-  // Add Pause/Resume button
-  (function addPauseButton(){
-    const pauseBtn = Object.assign(document.createElement('button'), { id:'fbp-pause', textContent:'Pause' });
-    Object.assign(pauseBtn.style,{padding:'8px',border:'1px solid #555',background:'#1b1f2a',color:'#e6e6e6',borderRadius:'8px',cursor:'pointer'});
-    const row = ui.querySelector('#fbp-exit')?.parentElement || ui;
-    row.insertBefore(pauseBtn, row.firstChild);
-    pauseBtn.addEventListener('click', ()=>{ pausedByUser = !pausedByUser; pauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause'; });
-  })();
+  // ===== Sticky HUD (always visible) =====
+  const hud = Object.assign(document.createElement('div'), { id:'fbp-hud' });
+  Object.assign(hud.style, {
+    position:'fixed', left:'12px', bottom:'12px', display:'flex', alignItems:'center', gap:'8px',
+    background:'#0f1115', color:'#e6e6e6', padding:'6px 10px', border:'1px solid #2a2f3a',
+    borderRadius:'999px', boxShadow:'0 8px 22px rgba(0,0,0,.35)', zIndex:2147483647
+  });
+  hud.innerHTML =
+    '<div id="fbp-led-mini" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
+    '<span id="fbp-hud-text" style="font-size:12px;opacity:.85">Idle</span>' +
+    '<button id="fbp-hud-toggle" style="padding:4px 8px;border:1px solid #555;background:#1b1f2a;color:#e6e6e6;border-radius:999px;cursor:pointer">Pause</button>';
+  document.body.appendChild(hud);
 
   // ===== Toast stack =====
   let toastWrap = document.getElementById('fbp-toastwrap');
@@ -160,14 +162,26 @@
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
     if(pos.top!=null && pos.right!=null){ ui.style.top=pos.top+'px'; ui.style.right=pos.right+'px'; }
     let sx=0, sy=0, startTop=0, startRight=0, dragging=false;
-    head.addEventListener('mousedown', e=>{ dragging=true; sx=e.clientX; sy=e.clientY; startTop=parseInt(getComputedStyle(ui).top,10); startRight=parseInt(getComputedStyle(ui).right,10); e.preventDefault(); }, true);
+    head.addEventListener('mousedown', e=>{
+      dragging=true; sx=e.clientX; sy=e.clientY;
+      startTop=parseInt(getComputedStyle(ui).top,10);
+      startRight=parseInt(getComputedStyle(ui).right,10);
+      e.preventDefault();
+    }, true);
     window.addEventListener('mousemove', e=>{
       if(!dragging) return;
       const dx=e.clientX-sx, dy=e.clientY-sy;
       ui.style.top = Math.max(8, startTop + dy) + 'px';
       ui.style.right = Math.max(8, startRight - dx) + 'px';
     }, true);
-    window.addEventListener('mouseup', ()=>{ if(!dragging) return; dragging=false; localStorage.setItem('fbp_ui_pos', JSON.stringify({ top: parseInt(ui.style.top,10)||16, right: parseInt(ui.style.right,10)||16 })); }, true);
+    window.addEventListener('mouseup', ()=>{
+      if(!dragging) return;
+      dragging=false;
+      localStorage.setItem('fbp_ui_pos', JSON.stringify({
+        top: parseInt(ui.style.top,10)||16,
+        right: parseInt(ui.style.right,10)||16
+      }));
+    }, true);
   })();
 
   // ===== modes =====
@@ -178,14 +192,34 @@
   setActiveMode('likes');
 
   // ===== refs & utils =====
-  const prevBox=ui.querySelector('#fbp-prev'); const likeC=ui.querySelector('#fbp-likec'); const commentC=ui.querySelector('#fbp-commentc'); const shareC=ui.querySelector('#fbp-sharec'); const postKeyEl=ui.querySelector('#fbp-postkey');
+  const prevBox=ui.querySelector('#fbp-prev');
+  const likeC=ui.querySelector('#fbp-likec');
+  const commentC=ui.querySelector('#fbp-commentc');
+  const shareC=ui.querySelector('#fbp-sharec');
+  const postKeyEl=ui.querySelector('#fbp-postkey');
+  const statusEl=ui.querySelector('#fbp-status');
+
+  const led = ui.querySelector('#fbp-led');
+  const runtext = ui.querySelector('#fbp-runtext');
+  const prog = ui.querySelector('#fbp-prog');
+  const opsEl = ui.querySelector('#fbp-ops');
+
+  const ledMini = hud.querySelector('#fbp-led-mini');
+  const hudText = hud.querySelector('#fbp-hud-text');
+  const hudToggle = hud.querySelector('#fbp-hud-toggle');
+  const panelPauseBtn = ui.querySelector('#fbp-pause');
+
   let POST_URL=location.href; function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
   let POST_KEY=postKeyFromURL(POST_URL);
   function setPostKeyLabel(){ postKeyEl.textContent=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY); postKeyEl.title=POST_KEY; }
   setPostKeyLabel();
 
   (function(){
-    function refreshPostKey(){ POST_URL = location.href; POST_KEY = postKeyFromURL(POST_URL); setPostKeyLabel(); }
+    function refreshPostKey(){
+      POST_URL = location.href;
+      POST_KEY = postKeyFromURL(POST_URL);
+      setPostKeyLabel();
+    }
     const _push = history.pushState, _replace = history.replaceState;
     history.pushState = function(){ const r=_push.apply(this, arguments); refreshPostKey(); return r; };
     history.replaceState = function(){ const r=_replace.apply(this, arguments); refreshPostKey(); return r; };
@@ -216,7 +250,6 @@
   function commentArticles(){ return Array.from(sc.querySelectorAll('[role="article"][aria-label^="Comment by "]')).filter(isVisible); }
   function pickCommentAnchor(article){ const candidates=Array.from(article.querySelectorAll('a[href]')).filter(isVisible); for(const a of candidates){ if(inMessageBody(a)) continue; const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) continue; const txt=(a.textContent||'').trim(); if(!txt) continue; if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) continue; return a; } return null; }
 
-  // Accept optional root (default sc)
   function sharerAnchors(root){
     const R = root || sc;
     const sel='[data-ad-rendering-role="profile_name"] a[href], h3 a[href]';
@@ -300,6 +333,7 @@
 
   let lastRender=0; function maybeRender(force=false){ const t=Date.now(); if(force || t-lastRender>900){ renderPreview(); lastRender=t; } else { updateStats(); } }
 
+  // ===== PREVIEW =====
   function renderPreview(){
     const rows = Array.from(store.values());
     let head =
@@ -310,10 +344,11 @@
         '<thead><tr style="position:sticky;top:0;background:#10131a">' +
           '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person_Name</th>' +
           '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person</th>' +
-          '<th title="Like" aria-label="Like" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">👍</th>' +
-          '<th title="Share" aria-label="Share" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">↗</th>' +
-          '<th title="Comment" aria-label="Comment" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">💬</th>' +
+          '<th title="Like" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">👍</th>' +
+          '<th title="Share" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">↗</th>' +
+          '<th title="Comment" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">💬</th>' +
         '</tr></thead><tbody>';
+
     let body = '';
     for(let i=0;i<Math.min(rows.length,50);i++){
       const r = rows[i];
@@ -343,20 +378,16 @@
   }
 
   // ===== Live run indicator =====
-  const led = ui.querySelector('#fbp-led');
-  const runtext = ui.querySelector('#fbp-runtext');
-  const prog = ui.querySelector('#fbp-prog');
-  const opsEl = ui.querySelector('#fbp-ops');
   let heartbeat=null, actionsThisRun=0, currentRunStarted=0;
   function setRunningState(state){ // 'idle' | 'running' | 'paused' | 'backoff'
-    if(!led||!runtext||!prog||!opsEl) return;
-    if(state==='running'){ led.style.background='#24d05a'; led.style.animation='fbp-pulse 1.6s infinite'; runtext.textContent='Running'; }
-    if(state==='paused'){ led.style.background='#ffcc00'; led.style.animation='fbp-pulse 1.6s infinite'; runtext.textContent='Paused'; }
-    if(state==='backoff'){ led.style.background='#ff6a00'; led.style.animation='fbp-pulse 1.6s infinite'; runtext.textContent='Backoff'; }
-    if(state==='idle'){ led.style.background='#666'; led.style.animation='none'; runtext.textContent='Idle'; prog.style.width='0%'; opsEl.textContent='0/min'; }
+    const setLED = (el,color,anim)=>{ if(!el) return; el.style.background=color; el.style.animation=anim?'fbp-pulse 1.6s infinite':'none'; };
+    if(state==='running'){ setLED(led,'#24d05a',true); setLED(ledMini,'#24d05a',true); runtext.textContent='Running'; hudText.textContent='Running'; }
+    if(state==='paused'){ setLED(led,'#ffcc00',true); setLED(ledMini,'#ffcc00',true); runtext.textContent='Paused'; hudText.textContent='Paused'; }
+    if(state==='backoff'){ setLED(led,'#ff6a00',true); setLED(ledMini,'#ff6a00',true); runtext.textContent='Backoff'; hudText.textContent='Backoff'; }
+    if(state==='idle'){ setLED(led,'#666',false); setLED(ledMini,'#666',false); runtext.textContent='Idle'; hudText.textContent='Idle'; prog.style.width='0%'; opsEl.textContent='0/min'; }
   }
   function startHeartbeat(started){
-    stopHeartbeat(); currentRunStarted = started; actionsThisRun = 0; setRunningState('running');
+    stopHeartbeat(); currentRunStarted = started; actionsThisRun = 0; setRunningState('running'); document.title = '⏵ Running · ' + document.title.replace(/^⏵ Running ·\s*/,'');
     heartbeat = setInterval(()=>{
       const elapsed = now() - currentRunStarted;
       const pct = Math.max(0, Math.min(100, Math.round(elapsed / LIMITS.MAX_RUN_MS * 100)));
@@ -369,7 +400,16 @@
       else setRunningState('running');
     }, 500);
   }
-  function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunningState('idle'); }
+  function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunningState('idle'); document.title = document.title.replace(/^⏵ Running ·\s*/,''); }
+
+  function setPaused(p){
+    pausedByUser = !!p;
+    panelPauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause';
+    hudToggle.textContent = pausedByUser ? 'Resume' : 'Pause';
+    setRunningState(pausedByUser ? 'paused' : 'running');
+  }
+  panelPauseBtn.addEventListener('click',()=>setPaused(!pausedByUser));
+  hudToggle.addEventListener('click',()=>setPaused(!pausedByUser));
 
   // ===== Run control =====
   let runToken=0;
@@ -407,18 +447,18 @@
     const dlg = getDialog(sc);
     POST_URL = resolvePostURL(dlg);
     POST_KEY = postKeyFromURL(POST_URL);
-    postKeyEl.textContent = (POST_KEY.length>42 ? (POST_KEY.slice(0,42)+'…') : POST_KEY);
-    postKeyEl.title = POST_KEY;
+    setPostKeyLabel();
 
     const myToken = ++runToken;
-    setUIBusy(true, 'Collecting…'); startHeartbeat(now()); document.title = '⏵ Running · ' + (document.title.replace(/^⏵ Running ·\s*/,''));
+    setUIBusy(true, 'Collecting…'); startHeartbeat(now());
 
     if (activeMode === 'likes')        await runLikes(myToken);
     else if (activeMode === 'comments') await runComments(myToken);
     else                                 await runShares(myToken);
 
     if (myToken !== runToken){ setUIBusy(false); stopHeartbeat(); return; }
-    setUIBusy(false); stopHeartbeat(); document.title = document.title.replace(/^⏵ Running ·\s*/,'');
+    setUIBusy(false); stopHeartbeat();
+
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
     if(hasAll){ toast('All three collected — downloading merged CSV…', 1400); downloadMerged(); }
     else { toast('Done for this mode ✓'); }
@@ -432,7 +472,7 @@
   async function runLikes(token){
     const kind = detectPanelType(sc);
     if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
-    const started = now(); // heartbeat already started on click
+    const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
