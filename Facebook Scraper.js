@@ -6,6 +6,57 @@
   const STABLE_LIMIT = 10;   // consecutive no-change cycles before stopping
   const EMPTY_PASSES = 4;    // consecutive empty cycles before stopping
 
+  // ===== Politeness controls =====
+  const LIMITS = { MAX_ACTIONS_PER_MIN: 20, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
+  function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
+  async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r, {timeout:1200})); } }
+  const now = ()=>performance.now();
+  
+  let pausedByUser = false;
+  let pausedByHidden = document.hidden;
+  document.addEventListener('visibilitychange', ()=>{ pausedByHidden = document.hidden; });
+  
+  const Throttle = (()=> {
+    let pauseMult = 1;
+    let tokens = LIMITS.MAX_ACTIONS_PER_MIN, maxTokens = LIMITS.MAX_ACTIONS_PER_MIN;
+    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 3000); // ~20/min
+    function spend(){ if(tokens<=0) return false; tokens--; return true; }
+    function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 2.0 : 1.25)); }
+    function ease(){ pauseMult = Math.max(1, pauseMult * 0.92); }
+    async function politeWait(base){
+      while(pausedByUser || pausedByHidden){ await new Promise(r=>setTimeout(r, 400)); }
+      await new Promise(r=>setTimeout(r, jitter(base * pauseMult)));
+      await yieldToBrowser();
+    }
+    return { spend, backoff, ease, politeWait };
+  })();
+  
+  // Add Pause/Resume button
+  (function addPauseButton(){
+    const pauseBtn = Object.assign(document.createElement('button'), { id:'fbp-pause', textContent:'Pause' });
+    Object.assign(pauseBtn.style,{padding:'8px',border:'1px solid #555',background:'#1b1f2a',color:'#e6e6e6',borderRadius:'8px',cursor:'pointer'});
+    const row = ui.querySelector('#fbp-exit')?.parentElement || ui;
+    row.insertBefore(pauseBtn, row.firstChild);
+    pauseBtn.addEventListener('click', ()=>{ pausedByUser = !pausedByUser; pauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause'; });
+  })();
+  
+  // Watch for server throttling
+  (function monitorNetwork(){
+    const origFetch = window.fetch;
+    window.fetch = async (...args)=>{
+      const res = await origFetch(...args);
+      if(res && (res.status===429 || res.status===403)){ toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
+      return res;
+    };
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function(...a){
+      this.addEventListener('load', function(){
+        if(this.status===429 || this.status===403){ toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
+      });
+      return origSend.apply(this, a);
+    };
+  })();
+
   // ===== UI =====
   const ui = document.createElement('div');
   Object.assign(ui.style, {
