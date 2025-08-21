@@ -1,14 +1,14 @@
-(async function FB_Export_Persons_UNIFIED_v17f(){
+(async function FB_Export_Persons_UNIFIED_v17g(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
-  // Slightly faster base delays; jitter + adaptive backoff still apply
-  const PAUSE = { likes: 2200, comments: 2400, shares: 2600 }; // ms between cycles
-  const STABLE_LIMIT = 10;   // consecutive no-change cycles before stopping
-  const EMPTY_PASSES = 4;    // consecutive empty cycles before stopping
+  // Slight speed-up vs v17f, still polite
+  const PAUSE = { likes: 2000, comments: 2200, shares: 2400 }; // ms between cycles
+  const STABLE_LIMIT = 10;
+  const EMPTY_PASSES = 4;
 
   // ===== Politeness controls =====
-  const LIMITS = { MAX_ACTIONS_PER_MIN: 24, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
+  const LIMITS = { MAX_ACTIONS_PER_MIN: 26, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
   function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
   async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r, {timeout:1200})); } }
   const now = ()=>performance.now();
@@ -32,31 +32,32 @@
     return { spend, backoff, ease, politeWait };
   })();
 
-  // Inject minimal keyframes for indicators
-  (function injectStyles(){
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes fbp-spin { to { transform: rotate(360deg); } }
-      @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
-    `;
-    document.head.appendChild(style);
-  })();
-
-  // Watch for server throttling
+  // ===== Throttle sensing (sets UI state)
+  let throttleSignal = false;
   (function monitorNetwork(){
     const origFetch = window.fetch;
     window.fetch = async (...args)=>{
       const res = await origFetch(...args);
-      if(res && (res.status===429 || res.status===403)){ toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
+      if(res && (res.status===429 || res.status===403)){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
       return res;
     };
     const origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function(...a){
       this.addEventListener('load', function(){
-        if(this.status===429 || this.status===403){ toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
+        if(this.status===429 || this.status===403){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
       });
       return origSend.apply(this, a);
     };
+  })();
+
+  // ===== Keyframes for indicators
+  (function injectStyles(){
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
+      @keyframes fbp-breath { 0%,100% { transform:scale(1) } 50% { transform:scale(1.06) } }
+    `;
+    document.head.appendChild(style);
   })();
 
   // ===== UI =====
@@ -89,12 +90,6 @@
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">2) Select panel & start</div>' +
         '<button id="fbp-go" style="width:100%;padding:10px;border:1px solid #3b7cff;background:#2353ff;color:white;border-radius:8px;cursor:pointer;font-weight:600">Select Panel & Start</button>' +
         '<div id="fbp-status" style="font-size:11px;opacity:.75;margin-top:6px">Ready</div>' +
-        '<div id="fbp-runind" style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
-          '<div id="fbp-led" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
-          '<div id="fbp-runtext" style="font-size:11px;opacity:.8;min-width:56px">Idle</div>' +
-          '<div style="flex:1;height:6px;background:#1a1f2b;border:1px solid #2b3344;border-radius:6px;overflow:hidden"><div id="fbp-prog" style="height:100%;width:0%;background:#3b7cff"></div></div>' +
-          '<div id="fbp-ops" style="font-size:11px;opacity:.75;width:68px;text-align:right">0/min</div>' +
-        '</div>' +
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between">' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
@@ -119,7 +114,23 @@
     '</div>';
   document.body.appendChild(ui);
 
-  // Add Pause/Resume button (after UI exists)
+  // Force-add live run bar under status (works even if previous HTML lacked it)
+  const statusEl = ui.querySelector('#fbp-status');
+  (function ensureRunBar(){
+    if(!ui.querySelector('#fbp-runind')){
+      const wrap = document.createElement('div');
+      wrap.id = 'fbp-runind';
+      wrap.style = 'display:flex;align-items:center;gap:8px;margin-top:6px';
+      wrap.innerHTML =
+        '<div id="fbp-led" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
+        '<div id="fbp-runtext" style="font-size:11px;opacity:.8;min-width:56px">Idle</div>' +
+        '<div style="flex:1;height:6px;background:#1a1f2b;border:1px solid #2b3344;border-radius:6px;overflow:hidden"><div id="fbp-prog" style="height:100%;width:0%;background:#3b7cff"></div></div>' +
+        '<div id="fbp-ops" style="font-size:11px;opacity:.75;width:68px;text-align:right">0/min</div>';
+      statusEl.parentElement.insertBefore(wrap, statusEl.nextSibling);
+    }
+  })();
+
+  // Add Pause/Resume button
   (function addPauseButton(){
     const pauseBtn = Object.assign(document.createElement('button'), { id:'fbp-pause', textContent:'Pause' });
     Object.assign(pauseBtn.style,{padding:'8px',border:'1px solid #555',background:'#1b1f2a',color:'#e6e6e6',borderRadius:'8px',cursor:'pointer'});
@@ -128,25 +139,17 @@
     pauseBtn.addEventListener('click', ()=>{ pausedByUser = !pausedByUser; pauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause'; });
   })();
 
-  // ===== Toast stack (no overlap) =====
+  // ===== Toast stack =====
   let toastWrap = document.getElementById('fbp-toastwrap');
   if(!toastWrap){
     toastWrap = Object.assign(document.createElement('div'), { id:'fbp-toastwrap' });
-    Object.assign(toastWrap.style, {
-      position:'fixed', right:'18px', bottom:'18px', display:'flex',
-      flexDirection:'column', gap:'8px', alignItems:'flex-end', zIndex:2147483647
-    });
+    Object.assign(toastWrap.style, { position:'fixed', right:'18px', bottom:'18px', display:'flex', flexDirection:'column', gap:'8px', alignItems:'flex-end', zIndex:2147483647 });
     document.body.appendChild(toastWrap);
   }
   function toast(msg, ms=1600){
     const t=document.createElement('div');
-    Object.assign(t.style,{
-      background:'#1b5cff', color:'#fff', padding:'10px 12px', borderRadius:'10px',
-      boxShadow:'0 8px 22px rgba(0,0,0,.35)', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
-      maxWidth:'280px'
-    });
-    t.textContent=msg;
-    toastWrap.appendChild(t);
+    Object.assign(t.style,{ background:'#1b5cff', color:'#fff', padding:'10px 12px', borderRadius:'10px', boxShadow:'0 8px 22px rgba(0,0,0,.35)', font:'12px system-ui, -apple-system, Segoe UI, Roboto', maxWidth:'280px' });
+    t.textContent=msg; toastWrap.appendChild(t);
     while(toastWrap.children.length>4){ toastWrap.firstChild.remove(); }
     setTimeout(()=>t.remove(), ms);
   }
@@ -157,26 +160,14 @@
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
     if(pos.top!=null && pos.right!=null){ ui.style.top=pos.top+'px'; ui.style.right=pos.right+'px'; }
     let sx=0, sy=0, startTop=0, startRight=0, dragging=false;
-    head.addEventListener('mousedown', e=>{
-      dragging=true; sx=e.clientX; sy=e.clientY;
-      startTop=parseInt(getComputedStyle(ui).top,10);
-      startRight=parseInt(getComputedStyle(ui).right,10);
-      e.preventDefault();
-    }, true);
+    head.addEventListener('mousedown', e=>{ dragging=true; sx=e.clientX; sy=e.clientY; startTop=parseInt(getComputedStyle(ui).top,10); startRight=parseInt(getComputedStyle(ui).right,10); e.preventDefault(); }, true);
     window.addEventListener('mousemove', e=>{
       if(!dragging) return;
       const dx=e.clientX-sx, dy=e.clientY-sy;
       ui.style.top = Math.max(8, startTop + dy) + 'px';
       ui.style.right = Math.max(8, startRight - dx) + 'px';
     }, true);
-    window.addEventListener('mouseup', ()=>{
-      if(!dragging) return;
-      dragging=false;
-      localStorage.setItem('fbp_ui_pos', JSON.stringify({
-        top: parseInt(ui.style.top,10)||16,
-        right: parseInt(ui.style.right,10)||16
-      }));
-    }, true);
+    window.addEventListener('mouseup', ()=>{ if(!dragging) return; dragging=false; localStorage.setItem('fbp_ui_pos', JSON.stringify({ top: parseInt(ui.style.top,10)||16, right: parseInt(ui.style.right,10)||16 })); }, true);
   })();
 
   // ===== modes =====
@@ -187,20 +178,14 @@
   setActiveMode('likes');
 
   // ===== refs & utils =====
-  const prevBox=ui.querySelector('#fbp-prev'); const likeC=ui.querySelector('#fbp-likec'); const commentC=ui.querySelector('#fbp-commentc'); const shareC=ui.querySelector('#fbp-sharec'); const postKeyEl=ui.querySelector('#fbp-postkey'); const statusEl=ui.querySelector('#fbp-status');
-  const led = ui.querySelector('#fbp-led'); const runtext = ui.querySelector('#fbp-runtext'); const prog = ui.querySelector('#fbp-prog'); const opsEl = ui.querySelector('#fbp-ops');
-
+  const prevBox=ui.querySelector('#fbp-prev'); const likeC=ui.querySelector('#fbp-likec'); const commentC=ui.querySelector('#fbp-commentc'); const shareC=ui.querySelector('#fbp-sharec'); const postKeyEl=ui.querySelector('#fbp-postkey');
   let POST_URL=location.href; function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
   let POST_KEY=postKeyFromURL(POST_URL);
   function setPostKeyLabel(){ postKeyEl.textContent=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY); postKeyEl.title=POST_KEY; }
   setPostKeyLabel();
 
   (function(){
-    function refreshPostKey(){
-      POST_URL = location.href;
-      POST_KEY = postKeyFromURL(POST_URL);
-      setPostKeyLabel();
-    }
+    function refreshPostKey(){ POST_URL = location.href; POST_KEY = postKeyFromURL(POST_URL); setPostKeyLabel(); }
     const _push = history.pushState, _replace = history.replaceState;
     history.pushState = function(){ const r=_push.apply(this, arguments); refreshPostKey(); return r; };
     history.replaceState = function(){ const r=_replace.apply(this, arguments); refreshPostKey(); return r; };
@@ -256,12 +241,10 @@
     return (aria + ' ' + head);
   }
 
-  // Canonical permalink resolver (helps video overlays)
   function resolvePostURL(dlg){
     const cand = new Set();
     const add = (h) => { const u = normalizeFB(h); if(u) cand.add(u); };
     const scope = dlg || document;
-
     scope.querySelectorAll('a[href]').forEach(a=>{
       const h=a.getAttribute('href')||'';
       if(/permalink\.php/i.test(h)) add(h);
@@ -270,23 +253,11 @@
       if(/\/videos\//i.test(h)) add(h);
       if(/\/photos\//i.test(h)) add(h);
     });
-
-    const score = (u)=>{
-      let s = 0;
-      if(/\/posts\//.test(u)) s+=8;
-      if(/permalink\.php|story_fbid|fbid=/.test(u)) s+=8;
-      if(/\/photos\//.test(u)) s+=4;
-      if(/\/videos\//.test(u)) s+=4;
-      if(/[?&]v=/.test(u) && /\/watch/.test(u)) s-=2;
-      return s;
-    };
-
-    let best=null, bestScore=-1;
-    cand.forEach(u=>{ const s=score(u); if(s>bestScore){ best=u; bestScore=s; }});
+    const score = u => ( (/\/posts\//.test(u)?8:0) + (/(permalink\.php|story_fbid|fbid=)/.test(u)?8:0) + (/\/photos\//.test(u)?4:0) + (/\/videos\//.test(u)?4:0) - ((/[?&]v=/.test(u)&&/\/watch/.test(u))?2:0) );
+    let best=null, bestScore=-1; cand.forEach(u=>{ const s=score(u); if(s>bestScore){ best=u; bestScore=s; }});
     return best || location.href;
   }
 
-  // STRONG shares check
   function isSharesPanel(container){
     const dlg = getDialog(container);
     const text = dialogText(dlg);
@@ -298,13 +269,10 @@
 
   function detectPanelType(container){
     if (isSharesPanel(container)) return 'shares';
-
     const dlg = container.closest && container.closest('[role="dialog"]');
     const label = norm(dlg?.getAttribute('aria-label')||'');
-
     if (container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
     if (/\bcomment/.test(label)) return 'comments';
-
     if (dlg) {
       const tablist = dlg.querySelector('[role="tablist"]');
       if (tablist) {
@@ -312,10 +280,8 @@
         if (hasAllTab) return 'likes';
       }
     }
-
     const manyListItems = container.querySelectorAll('[role="listitem"]').length >= 3;
     if (manyListItems && !container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'likes';
-
     return 'unknown';
   }
 
@@ -334,7 +300,6 @@
 
   let lastRender=0; function maybeRender(force=false){ const t=Date.now(); if(force || t-lastRender>900){ renderPreview(); lastRender=t; } else { updateStats(); } }
 
-  // ===== PREVIEW (fixed layout) =====
   function renderPreview(){
     const rows = Array.from(store.values());
     let head =
@@ -349,7 +314,6 @@
           '<th title="Share" aria-label="Share" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">↗</th>' +
           '<th title="Comment" aria-label="Comment" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">💬</th>' +
         '</tr></thead><tbody>';
-
     let body = '';
     for(let i=0;i<Math.min(rows.length,50);i++){
       const r = rows[i];
@@ -378,37 +342,34 @@
     document.body.appendChild(link); link.click(); link.remove();
   }
 
-  // ===== Run indicator helpers =====
+  // ===== Live run indicator =====
+  const led = ui.querySelector('#fbp-led');
+  const runtext = ui.querySelector('#fbp-runtext');
+  const prog = ui.querySelector('#fbp-prog');
+  const opsEl = ui.querySelector('#fbp-ops');
   let heartbeat=null, actionsThisRun=0, currentRunStarted=0;
-  function setRunning(on){
-    if(on){
-      led.style.background = '#24d05a';
-      led.style.animation = 'fbp-pulse 1.6s infinite';
-    } else {
-      led.style.background = '#666';
-      led.style.animation = 'none';
-      prog.style.width='0%';
-      opsEl.textContent='0/min';
-      runtext.textContent='Idle';
-    }
+  function setRunningState(state){ // 'idle' | 'running' | 'paused' | 'backoff'
+    if(!led||!runtext||!prog||!opsEl) return;
+    if(state==='running'){ led.style.background='#24d05a'; led.style.animation='fbp-pulse 1.6s infinite'; runtext.textContent='Running'; }
+    if(state==='paused'){ led.style.background='#ffcc00'; led.style.animation='fbp-pulse 1.6s infinite'; runtext.textContent='Paused'; }
+    if(state==='backoff'){ led.style.background='#ff6a00'; led.style.animation='fbp-pulse 1.6s infinite'; runtext.textContent='Backoff'; }
+    if(state==='idle'){ led.style.background='#666'; led.style.animation='none'; runtext.textContent='Idle'; prog.style.width='0%'; opsEl.textContent='0/min'; }
   }
   function startHeartbeat(started){
-    stopHeartbeat();
-    currentRunStarted = started;
-    actionsThisRun = 0;
-    setRunning(true);
+    stopHeartbeat(); currentRunStarted = started; actionsThisRun = 0; setRunningState('running');
     heartbeat = setInterval(()=>{
       const elapsed = now() - currentRunStarted;
       const pct = Math.max(0, Math.min(100, Math.round(elapsed / LIMITS.MAX_RUN_MS * 100)));
       prog.style.width = pct + '%';
-      const mins = Math.max(0.016, elapsed/60000); // floor to avoid div/0
+      const mins = Math.max(0.016, elapsed/60000);
       const apm = Math.round(actionsThisRun / mins);
-      const paused = pausedByUser || pausedByHidden;
-      runtext.textContent = paused ? 'Paused' : 'Running';
       opsEl.textContent = apm + '/min';
+      if(pausedByUser || pausedByHidden) setRunningState('paused');
+      else if(throttleSignal){ setRunningState('backoff'); throttleSignal=false; }
+      else setRunningState('running');
     }, 500);
   }
-  function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunning(false); }
+  function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunningState('idle'); }
 
   // ===== Run control =====
   let runToken=0;
@@ -436,18 +397,13 @@
     }
     sc = c || document.scrollingElement || document.body;
 
-    // Panel detection & auto-switch
     const detected = detectPanelType(sc);
-    if (detected !== 'unknown' && detected !== activeMode) {
-      setActiveMode(detected);
-      toast('Detected ' + detected + ' panel — switching mode.', 1400);
-    }
+    if (detected !== 'unknown' && detected !== activeMode) { setActiveMode(detected); toast('Detected ' + detected + ' panel — switching mode.', 1400); }
     if (detected === 'unknown') {
       if (activeMode === 'likes') toast('Panel looks like Reactions — proceeding as Likes.', 1400);
       else { toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 2000); return; }
     }
 
-    // lock post URL/key (use canonical from dialog when possible)
     const dlg = getDialog(sc);
     POST_URL = resolvePostURL(dlg);
     POST_KEY = postKeyFromURL(POST_URL);
@@ -455,18 +411,14 @@
     postKeyEl.title = POST_KEY;
 
     const myToken = ++runToken;
-    setUIBusy(true, 'Collecting…');
-    toast('Panel selected ✓ Collecting…', 1000);
+    setUIBusy(true, 'Collecting…'); startHeartbeat(now()); document.title = '⏵ Running · ' + (document.title.replace(/^⏵ Running ·\s*/,''));
 
     if (activeMode === 'likes')        await runLikes(myToken);
     else if (activeMode === 'comments') await runComments(myToken);
     else                                 await runShares(myToken);
 
     if (myToken !== runToken){ setUIBusy(false); stopHeartbeat(); return; }
-    setUIBusy(false);
-    stopHeartbeat();
-    statusEl.textContent = 'Ready';
-
+    setUIBusy(false); stopHeartbeat(); document.title = document.title.replace(/^⏵ Running ·\s*/,'');
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
     if(hasAll){ toast('All three collected — downloading merged CSV…', 1400); downloadMerged(); }
     else { toast('Done for this mode ✓'); }
@@ -480,12 +432,10 @@
   async function runLikes(token){
     const kind = detectPanelType(sc);
     if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
-    const started = now(); startHeartbeat(started);
+    const started = now(); // heartbeat already started on click
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-
-      // hard caps
       if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
       if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
 
@@ -505,16 +455,12 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){
-        sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
-        actionsThisRun++;
-      }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.likes);
 
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
 
-      // soft-block text detection
       const bodyTxt = document.body.innerText.toLowerCase();
       if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
         toast('Temporary block text detected. Cooling down.', 2000);
@@ -529,12 +475,10 @@
     const dlg=getDialog(sc); const text=dialogText(dlg);
     if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
     if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
-    const started = now(); startHeartbeat(started);
+    const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<320 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-
-      // hard caps
       if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
       if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
 
@@ -548,7 +492,6 @@
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
 
-      // cap expansion clicks per pass
       let clicked=0;
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
         if(clicked>=2) return;
@@ -563,10 +506,7 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){
-        sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
-        actionsThisRun++;
-      }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.comments);
 
@@ -585,12 +525,10 @@
 
   async function runShares(token){
     if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
-    const started = now(); startHeartbeat(started);
+    const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-
-      // hard caps
       if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
       if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
 
@@ -610,10 +548,7 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){
-        sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
-        actionsThisRun++;
-      }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.shares);
 
