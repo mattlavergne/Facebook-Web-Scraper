@@ -1,6 +1,11 @@
 (async function FB_Export_Persons_UNIFIED_v17c(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+  // ===== Tuning knobs =====
+  const PAUSE = { likes: 900, comments: 1200, shares: 900 }; // ms between scrolls
+  const STABLE_LIMIT = 10;   // how many consecutive "no scrollHeight change" cycles before stopping
+  const EMPTY_PASSES = 4;    // how many consecutive empty cycles before stopping
+
   // ===== UI =====
   const ui = document.createElement('div');
   Object.assign(ui.style, {
@@ -74,7 +79,6 @@
     });
     t.textContent=msg;
     toastWrap.appendChild(t);
-    // keep only last 4
     while(toastWrap.children.length>4){ toastWrap.firstChild.remove(); }
     setTimeout(()=>t.remove(), ms);
   }
@@ -189,23 +193,19 @@
     const text = dialogText(dlg);
     if (/\b(people\s+who\s+)?shared?\s+(this|your post)\b/i.test(text)) return true;
     if (/\bshares?\b/i.test(text)) return true;
-    // Structural fallback: if we can find several sharer anchors, treat as shares.
     if (sharerAnchors(container).length >= 2) return true;
     return false;
   }
 
   function detectPanelType(container){
-    // 1) Give priority to Shares (covers "People who shared this" even if replies exist)
     if (isSharesPanel(container)) return 'shares';
 
     const dlg = container.closest && container.closest('[role="dialog"]');
     const label = norm(dlg?.getAttribute('aria-label')||'');
 
-    // 2) Comments
     if (container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
     if (label.includes('comment')) return 'comments';
 
-    // 3) Likes/Reactions (tabs present)
     if (dlg) {
       const tablist = dlg.querySelector('[role="tablist"]');
       if (tablist) {
@@ -214,7 +214,6 @@
       }
     }
 
-    // 4) Fallback -> likes
     const manyListItems = container.querySelectorAll('[role="listitem"]').length >= 3;
     if (manyListItems && !container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'likes';
 
@@ -343,12 +342,12 @@
   ui.querySelector('#fbp-reset').addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
   ui.querySelector('#fbp-exit').addEventListener('click', ()=>ui.remove());
 
-  // ===== Runners =====
+  // ===== Runners (now using PAUSE/STABLE_LIMIT/EMPTY_PASSES) =====
   async function runLikes(token){
     const kind = detectPanelType(sc);
     if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
-    for(let i=0;i<280 && stable<6;i++){
+    for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
       let grew=false, found=0;
       likeItems().forEach(it=>{
@@ -360,10 +359,10 @@
         if(store.size>before){ grew=true; found++; }
       });
       counts.likes = Array.from(store.values()).filter(r=>r.Like==='Yes').length;
-      if(found===0){ if(++emptyPass>=2) break; } else emptyPass=0;
+      if(found===0){ if(++emptyPass>=EMPTY_PASSES) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
-      await sleep(520);
+      await sleep(PAUSE.likes);
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
     }
     maybeRender(true);
@@ -374,7 +373,7 @@
     if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
     if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
-    for(let i=0;i<320 && stable<6;i++){
+    for(let i=0;i<320 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
       let grew=false, found=0;
       commentArticles().forEach(art=>{
@@ -390,10 +389,10 @@
         if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')) b.click();
       });
       counts.comments = Array.from(store.values()).filter(r=>r.Comment==='Yes').length;
-      if(found===0){ if(++emptyPass>=2) break; } else emptyPass=0;
+      if(found===0){ if(++emptyPass>=EMPTY_PASSES) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
-      await sleep(760);
+      await sleep(PAUSE.comments);
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
     }
     if(!anyFound) toast('No comments found in this panel.', 1400);
@@ -403,7 +402,7 @@
   async function runShares(token){
     if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
-    for(let i=0;i<280 && stable<6;i++){
+    for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
       let grew=false, found=0;
       const as = sharerAnchors(sc);
@@ -415,10 +414,10 @@
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
       counts.shares = Array.from(store.values()).filter(r=>r.Share==='Yes').length;
-      if(found===0){ if(++emptyPass>=2) break; } else emptyPass=0;
+      if(found===0){ if(++emptyPass>=EMPTY_PASSES) break; } else emptyPass=0;
       maybeRender(grew);
       sc.scrollTo(0, sc.scrollHeight);
-      await sleep(520);
+      await sleep(PAUSE.shares);
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
     }
     if(!anyFound) toast('No shares found in this panel.', 1400);
