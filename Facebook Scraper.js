@@ -1,10 +1,10 @@
-(async function FB_Export_Persons_UNIFIED_v17c(){
+(async function FB_Export_Persons_UNIFIED_v17d(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
   const PAUSE = { likes: 1500, comments: 1500, shares: 1600 }; // ms between scrolls
-  const STABLE_LIMIT = 10;   // how many consecutive "no scrollHeight change" cycles before stopping
-  const EMPTY_PASSES = 4;    // how many consecutive empty cycles before stopping
+  const STABLE_LIMIT = 10;   // consecutive no-change cycles before stopping
+  const EMPTY_PASSES = 4;    // consecutive empty cycles before stopping
 
   // ===== UI =====
   const ui = document.createElement('div');
@@ -162,7 +162,7 @@
   function commentArticles(){ return Array.from(sc.querySelectorAll('[role="article"][aria-label^="Comment by "]')).filter(isVisible); }
   function pickCommentAnchor(article){ const candidates=Array.from(article.querySelectorAll('a[href]')).filter(isVisible); for(const a of candidates){ if(inMessageBody(a)) continue; const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) continue; const txt=(a.textContent||'').trim(); if(!txt) continue; if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) continue; return a; } return null; }
 
-  // Accept an optional root (default: sc) so detection can probe a specific container
+  // Accept optional root (default sc)
   function sharerAnchors(root){
     const R = root || sc;
     const sel='[data-ad-rendering-role="profile_name"] a[href], h3 a[href]';
@@ -187,25 +187,60 @@
     return (aria + ' ' + head);
   }
 
-  // Robust Shares test (does NOT reject if comment nodes are present)
+  // Canonical permalink resolver (helps video overlays)
+  function resolvePostURL(dlg){
+    const cand = new Set();
+    const add = (h) => { const u = normalizeFB(h); if(u) cand.add(u); };
+    const scope = dlg || document;
+
+    scope.querySelectorAll('a[href]').forEach(a=>{
+      const h=a.getAttribute('href')||'';
+      if(/permalink\.php/i.test(h)) add(h);
+      if(/[\?/](story_fbid|fbid)=/i.test(h)) add(h);
+      if(/\/posts\//i.test(h)) add(h);
+      if(/\/videos\//i.test(h)) add(h);
+      if(/\/photos\//i.test(h)) add(h);
+    });
+
+    // Rank: posts/permalink/story_fbid > photos/videos > others
+    const score = (u)=>{
+      let s = 0;
+      if(/\/posts\//.test(u)) s+=8;
+      if(/permalink\.php|story_fbid|fbid=/.test(u)) s+=8;
+      if(/\/photos\//.test(u)) s+=4;
+      if(/\/videos\//.test(u)) s+=4;
+      // deprioritize watch/?v=
+      if(/[?&]v=/.test(u) && /\/watch/.test(u)) s-=2;
+      return s;
+    };
+
+    let best=null, bestScore=-1;
+    cand.forEach(u=>{ const s=score(u); if(s>bestScore){ best=u; bestScore=s; }});
+    return best || location.href;
+  }
+
+  // STRONG shares check: only accept explicit "shares" wording in dialog label/headings
   function isSharesPanel(container){
     const dlg = getDialog(container);
-    const text = dialogText(dlg);
-    if (/\b(people\s+who\s+)?shared?\s+(this|your post)\b/i.test(text)) return true;
-    if (/\bshares?\b/i.test(text)) return true;
-    if (sharerAnchors(container).length >= 2) return true;
-    return false;
+    const text = dialogText(dlg); // aria + top headings
+    if (/\b(people\s+who\s+)?shared?\s+this\b/i.test(text)) return true;
+    if (/\bpeople\s+who\s+shared\b/i.test(text)) return true;
+    if (/\bshares?\b/i.test(text) && !/\bcomment/i.test(text)) return true;
+    return false; // no structural fallback to avoid false-positives
   }
 
   function detectPanelType(container){
+    // 1) Shares (must have explicit copy)
     if (isSharesPanel(container)) return 'shares';
 
     const dlg = container.closest && container.closest('[role="dialog"]');
     const label = norm(dlg?.getAttribute('aria-label')||'');
 
+    // 2) Comments
     if (container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
-    if (label.includes('comment')) return 'comments';
+    if (/\bcomment/.test(label)) return 'comments';
 
+    // 3) Likes/reactions
     if (dlg) {
       const tablist = dlg.querySelector('[role="tablist"]');
       if (tablist) {
@@ -214,6 +249,7 @@
       }
     }
 
+    // 4) Fallback -> likes only if it resembles a reaction list (no comments visible)
     const manyListItems = container.querySelectorAll('[role="listitem"]').length >= 3;
     if (manyListItems && !container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'likes';
 
@@ -316,10 +352,12 @@
       else { toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 2000); return; }
     }
 
-    // lock post URL/key
-    POST_URL = location.href;
+    // lock post URL/key (use canonical from dialog when possible)
+    const dlg = getDialog(sc);
+    POST_URL = resolvePostURL(dlg);
     POST_KEY = postKeyFromURL(POST_URL);
-    postKeyEl.textContent = 'post key: ' + (POST_KEY.length>42 ? (POST_KEY.slice(0,42)+'…') : POST_KEY);
+    postKeyEl.textContent = (POST_KEY.length>42 ? (POST_KEY.slice(0,42)+'…') : POST_KEY);
+    postKeyEl.title = POST_KEY;
 
     const myToken = ++runToken;
     setUIBusy(true, 'Collecting…');
@@ -342,7 +380,7 @@
   ui.querySelector('#fbp-reset').addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
   ui.querySelector('#fbp-exit').addEventListener('click', ()=>ui.remove());
 
-  // ===== Runners (now using PAUSE/STABLE_LIMIT/EMPTY_PASSES) =====
+  // ===== Runners =====
   async function runLikes(token){
     const kind = detectPanelType(sc);
     if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
