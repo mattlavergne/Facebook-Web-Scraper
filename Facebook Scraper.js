@@ -1,14 +1,14 @@
-(async function FB_Export_Persons_UNIFIED_v17e(){
+(async function FB_Export_Persons_UNIFIED_v17f(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
-  // Slower base delays; actual waits use jitter + adaptive backoff
-  const PAUSE = { likes: 2600, comments: 2800, shares: 3000 }; // ms between cycles
+  // Slightly faster base delays; jitter + adaptive backoff still apply
+  const PAUSE = { likes: 2200, comments: 2400, shares: 2600 }; // ms between cycles
   const STABLE_LIMIT = 10;   // consecutive no-change cycles before stopping
   const EMPTY_PASSES = 4;    // consecutive empty cycles before stopping
 
   // ===== Politeness controls =====
-  const LIMITS = { MAX_ACTIONS_PER_MIN: 20, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
+  const LIMITS = { MAX_ACTIONS_PER_MIN: 24, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
   function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
   async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r, {timeout:1200})); } }
   const now = ()=>performance.now();
@@ -20,16 +20,26 @@
   const Throttle = (()=> {
     let pauseMult = 1;
     let tokens = LIMITS.MAX_ACTIONS_PER_MIN, maxTokens = LIMITS.MAX_ACTIONS_PER_MIN;
-    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 3000); // ~20/min
+    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 3000); // ~20/min baseline
     function spend(){ if(tokens<=0) return false; tokens--; return true; }
-    function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 2.0 : 1.25)); }
-    function ease(){ pauseMult = Math.max(1, pauseMult * 0.92); }
+    function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 2.0 : 1.20)); }
+    function ease(){ pauseMult = Math.max(1, pauseMult * 0.90); }
     async function politeWait(base){
       while(pausedByUser || pausedByHidden){ await new Promise(r=>setTimeout(r, 400)); }
       await new Promise(r=>setTimeout(r, jitter(base * pauseMult)));
       await yieldToBrowser();
     }
     return { spend, backoff, ease, politeWait };
+  })();
+
+  // Inject minimal keyframes for indicators
+  (function injectStyles(){
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fbp-spin { to { transform: rotate(360deg); } }
+      @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
+    `;
+    document.head.appendChild(style);
   })();
 
   // Watch for server throttling
@@ -79,6 +89,12 @@
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">2) Select panel & start</div>' +
         '<button id="fbp-go" style="width:100%;padding:10px;border:1px solid #3b7cff;background:#2353ff;color:white;border-radius:8px;cursor:pointer;font-weight:600">Select Panel & Start</button>' +
         '<div id="fbp-status" style="font-size:11px;opacity:.75;margin-top:6px">Ready</div>' +
+        '<div id="fbp-runind" style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
+          '<div id="fbp-led" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
+          '<div id="fbp-runtext" style="font-size:11px;opacity:.8;min-width:56px">Idle</div>' +
+          '<div style="flex:1;height:6px;background:#1a1f2b;border:1px solid #2b3344;border-radius:6px;overflow:hidden"><div id="fbp-prog" style="height:100%;width:0%;background:#3b7cff"></div></div>' +
+          '<div id="fbp-ops" style="font-size:11px;opacity:.75;width:68px;text-align:right">0/min</div>' +
+        '</div>' +
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between">' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
@@ -172,6 +188,7 @@
 
   // ===== refs & utils =====
   const prevBox=ui.querySelector('#fbp-prev'); const likeC=ui.querySelector('#fbp-likec'); const commentC=ui.querySelector('#fbp-commentc'); const shareC=ui.querySelector('#fbp-sharec'); const postKeyEl=ui.querySelector('#fbp-postkey'); const statusEl=ui.querySelector('#fbp-status');
+  const led = ui.querySelector('#fbp-led'); const runtext = ui.querySelector('#fbp-runtext'); const prog = ui.querySelector('#fbp-prog'); const opsEl = ui.querySelector('#fbp-ops');
 
   let POST_URL=location.href; function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
   let POST_KEY=postKeyFromURL(POST_URL);
@@ -361,6 +378,38 @@
     document.body.appendChild(link); link.click(); link.remove();
   }
 
+  // ===== Run indicator helpers =====
+  let heartbeat=null, actionsThisRun=0, currentRunStarted=0;
+  function setRunning(on){
+    if(on){
+      led.style.background = '#24d05a';
+      led.style.animation = 'fbp-pulse 1.6s infinite';
+    } else {
+      led.style.background = '#666';
+      led.style.animation = 'none';
+      prog.style.width='0%';
+      opsEl.textContent='0/min';
+      runtext.textContent='Idle';
+    }
+  }
+  function startHeartbeat(started){
+    stopHeartbeat();
+    currentRunStarted = started;
+    actionsThisRun = 0;
+    setRunning(true);
+    heartbeat = setInterval(()=>{
+      const elapsed = now() - currentRunStarted;
+      const pct = Math.max(0, Math.min(100, Math.round(elapsed / LIMITS.MAX_RUN_MS * 100)));
+      prog.style.width = pct + '%';
+      const mins = Math.max(0.016, elapsed/60000); // floor to avoid div/0
+      const apm = Math.round(actionsThisRun / mins);
+      const paused = pausedByUser || pausedByHidden;
+      runtext.textContent = paused ? 'Paused' : 'Running';
+      opsEl.textContent = apm + '/min';
+    }, 500);
+  }
+  function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunning(false); }
+
   // ===== Run control =====
   let runToken=0;
   function setUIBusy(busy, label){
@@ -413,8 +462,9 @@
     else if (activeMode === 'comments') await runComments(myToken);
     else                                 await runShares(myToken);
 
-    if (myToken !== runToken){ setUIBusy(false); return; }
+    if (myToken !== runToken){ setUIBusy(false); stopHeartbeat(); return; }
     setUIBusy(false);
+    stopHeartbeat();
     statusEl.textContent = 'Ready';
 
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
@@ -430,7 +480,7 @@
   async function runLikes(token){
     const kind = detectPanelType(sc);
     if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
-    const started = now();
+    const started = now(); startHeartbeat(started);
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
@@ -457,6 +507,7 @@
 
       if(Throttle.spend()){
         sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
+        actionsThisRun++;
       }
 
       await Throttle.politeWait(PAUSE.likes);
@@ -478,7 +529,7 @@
     const dlg=getDialog(sc); const text=dialogText(dlg);
     if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
     if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
-    const started = now();
+    const started = now(); startHeartbeat(started);
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<320 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
@@ -502,7 +553,7 @@
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
         if(clicked>=2) return;
         const t=(b.innerText||'').toLowerCase();
-        if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')){ b.click(); clicked++; }
+        if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')){ b.click(); clicked++; actionsThisRun++; }
       });
 
       counts.comments = Array.from(store.values()).filter(r=>r.Comment==='Yes').length;
@@ -514,6 +565,7 @@
 
       if(Throttle.spend()){
         sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
+        actionsThisRun++;
       }
 
       await Throttle.politeWait(PAUSE.comments);
@@ -533,7 +585,7 @@
 
   async function runShares(token){
     if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
-    const started = now();
+    const started = now(); startHeartbeat(started);
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
@@ -560,6 +612,7 @@
 
       if(Throttle.spend()){
         sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
+        actionsThisRun++;
       }
 
       await Throttle.politeWait(PAUSE.shares);
