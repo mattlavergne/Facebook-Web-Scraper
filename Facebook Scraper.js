@@ -1,8 +1,9 @@
-(async function FB_Export_Persons_UNIFIED_v17d(){
+(async function FB_Export_Persons_UNIFIED_v17e(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
-  const PAUSE = { likes: 1500, comments: 1500, shares: 1600 }; // ms between scrolls
+  // Slower base delays; actual waits use jitter + adaptive backoff
+  const PAUSE = { likes: 2600, comments: 2800, shares: 3000 }; // ms between cycles
   const STABLE_LIMIT = 10;   // consecutive no-change cycles before stopping
   const EMPTY_PASSES = 4;    // consecutive empty cycles before stopping
 
@@ -11,11 +12,11 @@
   function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
   async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r, {timeout:1200})); } }
   const now = ()=>performance.now();
-  
+
   let pausedByUser = false;
   let pausedByHidden = document.hidden;
   document.addEventListener('visibilitychange', ()=>{ pausedByHidden = document.hidden; });
-  
+
   const Throttle = (()=> {
     let pauseMult = 1;
     let tokens = LIMITS.MAX_ACTIONS_PER_MIN, maxTokens = LIMITS.MAX_ACTIONS_PER_MIN;
@@ -30,16 +31,7 @@
     }
     return { spend, backoff, ease, politeWait };
   })();
-  
-  // Add Pause/Resume button
-  (function addPauseButton(){
-    const pauseBtn = Object.assign(document.createElement('button'), { id:'fbp-pause', textContent:'Pause' });
-    Object.assign(pauseBtn.style,{padding:'8px',border:'1px solid #555',background:'#1b1f2a',color:'#e6e6e6',borderRadius:'8px',cursor:'pointer'});
-    const row = ui.querySelector('#fbp-exit')?.parentElement || ui;
-    row.insertBefore(pauseBtn, row.firstChild);
-    pauseBtn.addEventListener('click', ()=>{ pausedByUser = !pausedByUser; pauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause'; });
-  })();
-  
+
   // Watch for server throttling
   (function monitorNetwork(){
     const origFetch = window.fetch;
@@ -110,6 +102,15 @@
       '</div>' +
     '</div>';
   document.body.appendChild(ui);
+
+  // Add Pause/Resume button (after UI exists)
+  (function addPauseButton(){
+    const pauseBtn = Object.assign(document.createElement('button'), { id:'fbp-pause', textContent:'Pause' });
+    Object.assign(pauseBtn.style,{padding:'8px',border:'1px solid #555',background:'#1b1f2a',color:'#e6e6e6',borderRadius:'8px',cursor:'pointer'});
+    const row = ui.querySelector('#fbp-exit')?.parentElement || ui;
+    row.insertBefore(pauseBtn, row.firstChild);
+    pauseBtn.addEventListener('click', ()=>{ pausedByUser = !pausedByUser; pauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause'; });
+  })();
 
   // ===== Toast stack (no overlap) =====
   let toastWrap = document.getElementById('fbp-toastwrap');
@@ -253,14 +254,12 @@
       if(/\/photos\//i.test(h)) add(h);
     });
 
-    // Rank: posts/permalink/story_fbid > photos/videos > others
     const score = (u)=>{
       let s = 0;
       if(/\/posts\//.test(u)) s+=8;
       if(/permalink\.php|story_fbid|fbid=/.test(u)) s+=8;
       if(/\/photos\//.test(u)) s+=4;
       if(/\/videos\//.test(u)) s+=4;
-      // deprioritize watch/?v=
       if(/[?&]v=/.test(u) && /\/watch/.test(u)) s-=2;
       return s;
     };
@@ -270,28 +269,25 @@
     return best || location.href;
   }
 
-  // STRONG shares check: only accept explicit "shares" wording in dialog label/headings
+  // STRONG shares check
   function isSharesPanel(container){
     const dlg = getDialog(container);
-    const text = dialogText(dlg); // aria + top headings
+    const text = dialogText(dlg);
     if (/\b(people\s+who\s+)?shared?\s+this\b/i.test(text)) return true;
     if (/\bpeople\s+who\s+shared\b/i.test(text)) return true;
     if (/\bshares?\b/i.test(text) && !/\bcomment/i.test(text)) return true;
-    return false; // no structural fallback to avoid false-positives
+    return false;
   }
 
   function detectPanelType(container){
-    // 1) Shares (must have explicit copy)
     if (isSharesPanel(container)) return 'shares';
 
     const dlg = container.closest && container.closest('[role="dialog"]');
     const label = norm(dlg?.getAttribute('aria-label')||'');
 
-    // 2) Comments
     if (container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'comments';
     if (/\bcomment/.test(label)) return 'comments';
 
-    // 3) Likes/reactions
     if (dlg) {
       const tablist = dlg.querySelector('[role="tablist"]');
       if (tablist) {
@@ -300,7 +296,6 @@
       }
     }
 
-    // 4) Fallback -> likes only if it resembles a reaction list (no comments visible)
     const manyListItems = container.querySelectorAll('[role="listitem"]').length >= 3;
     if (manyListItems && !container.querySelector('[role="article"][aria-label^="Comment by "]')) return 'likes';
 
@@ -320,7 +315,7 @@
     store.set(key, existing);
   }
 
-  let lastRender=0; function maybeRender(force=false){ const now=Date.now(); if(force || now-lastRender>900){ renderPreview(); lastRender=now; } else { updateStats(); } }
+  let lastRender=0; function maybeRender(force=false){ const t=Date.now(); if(force || t-lastRender>900){ renderPreview(); lastRender=t; } else { updateStats(); } }
 
   // ===== PREVIEW (fixed layout) =====
   function renderPreview(){
@@ -435,9 +430,15 @@
   async function runLikes(token){
     const kind = detectPanelType(sc);
     if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
+    const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
+
+      // hard caps
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+
       let grew=false, found=0;
       likeItems().forEach(it=>{
         const a = pickLikeAnchor(it); if(!a) return;
@@ -448,11 +449,27 @@
         if(store.size>before){ grew=true; found++; }
       });
       counts.likes = Array.from(store.values()).filter(r=>r.Like==='Yes').length;
-      if(found===0){ if(++emptyPass>=EMPTY_PASSES) break; } else emptyPass=0;
+
+      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; }
+      else { emptyPass=0; Throttle.ease(); }
+
       maybeRender(grew);
-      sc.scrollTo(0, sc.scrollHeight);
-      await sleep(PAUSE.likes);
+
+      if(Throttle.spend()){
+        sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
+      }
+
+      await Throttle.politeWait(PAUSE.likes);
+
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
+
+      // soft-block text detection
+      const bodyTxt = document.body.innerText.toLowerCase();
+      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
+        toast('Temporary block text detected. Cooling down.', 2000);
+        Throttle.backoff(true);
+        break;
+      }
     }
     maybeRender(true);
   }
@@ -461,9 +478,15 @@
     const dlg=getDialog(sc); const text=dialogText(dlg);
     if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
     if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
+    const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<320 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
+
+      // hard caps
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+
       let grew=false, found=0;
       commentArticles().forEach(art=>{
         const a = pickCommentAnchor(art); if(!a) return;
@@ -473,16 +496,36 @@
         const before = store.size; upsertRow(name,url,'comments');
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
+
+      // cap expansion clicks per pass
+      let clicked=0;
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
+        if(clicked>=2) return;
         const t=(b.innerText||'').toLowerCase();
-        if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')) b.click();
+        if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')){ b.click(); clicked++; }
       });
+
       counts.comments = Array.from(store.values()).filter(r=>r.Comment==='Yes').length;
-      if(found===0){ if(++emptyPass>=EMPTY_PASSES) break; } else emptyPass=0;
+
+      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; }
+      else { emptyPass=0; Throttle.ease(); }
+
       maybeRender(grew);
-      sc.scrollTo(0, sc.scrollHeight);
-      await sleep(PAUSE.comments);
+
+      if(Throttle.spend()){
+        sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
+      }
+
+      await Throttle.politeWait(PAUSE.comments);
+
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
+
+      const bodyTxt = document.body.innerText.toLowerCase();
+      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
+        toast('Temporary block text detected. Cooling down.', 2000);
+        Throttle.backoff(true);
+        break;
+      }
     }
     if(!anyFound) toast('No comments found in this panel.', 1400);
     maybeRender(true);
@@ -490,9 +533,15 @@
 
   async function runShares(token){
     if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
+    const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
+
+      // hard caps
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+
       let grew=false, found=0;
       const as = sharerAnchors(sc);
       as.forEach(a=>{
@@ -503,11 +552,26 @@
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
       counts.shares = Array.from(store.values()).filter(r=>r.Share==='Yes').length;
-      if(found===0){ if(++emptyPass>=EMPTY_PASSES) break; } else emptyPass=0;
+
+      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; }
+      else { emptyPass=0; Throttle.ease(); }
+
       maybeRender(grew);
-      sc.scrollTo(0, sc.scrollHeight);
-      await sleep(PAUSE.shares);
+
+      if(Throttle.spend()){
+        sc.scrollBy(0, Math.round(sc.clientHeight * 0.75));
+      }
+
+      await Throttle.politeWait(PAUSE.shares);
+
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
+
+      const bodyTxt = document.body.innerText.toLowerCase();
+      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
+        toast('Temporary block text detected. Cooling down.', 2000);
+        Throttle.backoff(true);
+        break;
+      }
     }
     if(!anyFound) toast('No shares found in this panel.', 1400);
     maybeRender(true);
