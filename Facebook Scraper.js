@@ -1,20 +1,19 @@
-// FB People Scraper — v17o_sticky_min: sticky footer, min-height floor, narrow width, and "minimize = header + footer only"
-(async function FB_Export_Persons_UNIFIED_v17o_sticky_min(){
-  const MIN_PANEL_HEIGHT = 300; // <- smallest height before it auto-clamps (tweak if you like)
+// FB People Scraper — v17o_sticky_min2 (fix duplicate vars): sticky footer, min-height floor, header+footer-only minimize, narrower width, recenter hotkey
+(async function FB_Export_Persons_UNIFIED_v17o_sticky_min2(){
+  const MIN_PANEL_HEIGHT = 300;   // smallest non-minimized height
   const DEFAULT_W = 400, MIN_W = 340;
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const now = ()=>performance.now();
 
   // ===== Tuning knobs =====
   const PAUSE = { likes: 1700, comments: 1900, shares: 2000 };
-  const STABLE_LIMIT = 10;
-  const EMPTY_PASSES = 4;
+  const STABLE_LIMIT = 10, EMPTY_PASSES = 4;
 
   // ===== Politeness controls =====
   const LIMITS = { MAX_ACTIONS_PER_MIN: 28, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
   function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
   async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r,{timeout:1200})); } }
-  const now = ()=>performance.now();
 
   let pausedByUser = false;
   let pausedByHidden = document.hidden;
@@ -63,7 +62,6 @@
       #fbp-panel button { transition: transform .06s ease, background-color .12s ease, border-color .12s ease, opacity .12s ease; }
       #fbp-panel button:active { transform: translateY(1px) scale(.99); }
 
-      /* Header */
       #fbp-head{
         position:sticky; top:0; z-index:3;
         background:#1d2129; color:#e6e6e6;
@@ -77,19 +75,12 @@
       #fbp-postkey a{ color:#8ab4ff !important; text-decoration:none }
       #fbp-postkey a:hover{ text-decoration:underline }
 
-      .fbp-chip{
-        display:inline-flex; align-items:center;
-        padding:6px 10px; border-radius:999px;
-        border:1px solid #384155; background:#171a20; color:#e6e6e6;
-        cursor:pointer; user-select:none; font:12px system-ui,-apple-system,Segoe UI,Roboto;
-      }
+      .fbp-chip{ display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; border:1px solid #384155; background:#171a20; color:#e6e6e6; cursor:pointer; user-select:none; }
       .fbp-chip:hover{ filter:brightness(1.08) }
       .fbp-chip.active{ border-color:#3b7cff;background:#1a2337; box-shadow:inset 0 0 0 1px #2b3960; }
-      #fbp-modes{ display:flex; gap:6px; flex-wrap:wrap; min-height:32px }
 
       .fbp-btn{ border:1px solid #2a2f3a; background:#141823; color:#dfe3ee; border-radius:8px; padding:8px; cursor:pointer }
       .fbp-btn.primary{ border-color:#3b7cff; background:#2353ff; color:#fff; font-weight:600 }
-      .fbp-btn.warn{ border-color:#444; background:#181b22 }
       .fbp-btn.green{ border-color:#2c8a3f; background:#1d7a31; color:#fff; font-weight:600 }
       .fbp-btn.round{ border-radius:999px; padding:4px 10px; min-width:28px; text-align:center }
       .fbp-btn:hover{ filter:brightness(1.06) }
@@ -99,22 +90,17 @@
       #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; line-height:1; font-size:16px; font-weight:700; border-radius:8px; }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      /* Make body the scroll container so footer can stick to its bottom */
+      /* Make body scrollable so footer can stick to its bottom */
       #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:140px; padding:6px 6px 8px 6px; }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
 
-      /* Preview */
       #fbp-prev{ border:1px solid #293042;border-radius:8px; }
 
-      /* Footer: sticky in normal mode; absolute at bottom when minimized */
-      .fbp-bar{
-        position:sticky; bottom:0; z-index:2;
-        display:flex; align-items:center; gap:8px; margin-top:8px;
-        background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px;
-        box-shadow:0 8px 22px rgba(0,0,0,.35);
-      }
+      /* Footer: sticky in normal mode; absolute in minimized mode */
+      .fbp-bar{ position:sticky; bottom:0; z-index:2; display:flex; align-items:center; gap:8px; margin-top:8px;
+        background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px; box-shadow:0 8px 22px rgba(0,0,0,.35); }
       .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:8px; z-index:4; }
       .fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
       .fbp-bar .grow{ flex:1 }
@@ -141,7 +127,7 @@
   try{
     const sz = JSON.parse(localStorage.getItem('fbp_ui_size')||'null');
     if(sz && sz.w && sz.h){
-      ui.style.width = Math.max(sz.w, MIN_W) + 'px';
+      ui.style.width  = Math.max(sz.w, MIN_W) + 'px';
       ui.style.height = Math.max(sz.h, MIN_PANEL_HEIGHT) + 'px';
     }
   }catch{}
@@ -198,7 +184,31 @@
     '</div>';
   document.body.appendChild(ui);
 
-  // ===== Window controls =====
+  // ===== Always keep it visible + quick reset hotkey
+  (function ensureVisible(){
+    const m=8;
+    function clamp(){
+      const w=ui.offsetWidth||DEFAULT_W, h=ui.offsetHeight||MIN_PANEL_HEIGHT;
+      const vw=innerWidth, vh=innerHeight;
+      let top=parseInt(getComputedStyle(ui).top,10);    if(!Number.isFinite(top) || top < m || top > vh - 60) top = 16;
+      let right=parseInt(getComputedStyle(ui).right,10);if(!Number.isFinite(right) || right < m || (vw - right - w) < 6) right = 16;
+      ui.style.top = top+'px';
+      ui.style.right = right+'px';
+    }
+    clamp();
+    addEventListener('resize', clamp);
+    addEventListener('keydown', e=>{
+      if(e.altKey && e.shiftKey && (e.key.toLowerCase()==='f')){
+        ui.style.top='16px'; ui.style.right='16px';
+        localStorage.removeItem('fbp_ui_pos');
+        localStorage.setItem('fbp_ui_min','0');
+        const bodyEl = ui.querySelector('#fbp-body');
+        if (bodyEl && bodyEl.style.display==='none'){ bodyEl.style.display='flex'; ui.style.resize='both'; moveBar(false); }
+      }
+    });
+  })();
+
+  // ===== Window controls / minimize
   ui.querySelector('#fbp-close').addEventListener('click', ()=>ui.remove());
   (function(){
     const bodyEl = ui.querySelector('#fbp-body');
@@ -211,37 +221,26 @@
     let lastSize = { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
 
     function moveBar(min){
-      if(min){
-        // move footer to panel root and pin to absolute bottom while body is hidden
-        ui.appendChild(barEl);
-        barEl.classList.add('float-bottom');
-      }else{
-        previewWrap.appendChild(barEl);
-        barEl.classList.remove('float-bottom');
-      }
+      if(min){ ui.appendChild(barEl); barEl.classList.add('float-bottom'); }
+      else   { previewWrap.appendChild(barEl); barEl.classList.remove('float-bottom'); }
     }
 
     function applyMin(min){
       minimized = min;
       localStorage.setItem('fbp_ui_min', min ? '1' : '0');
       if(min){
-        // save size then collapse to header+footer only
         if(ui.style.width || ui.style.height){ lastSize = { w: ui.offsetWidth, h: ui.offsetHeight }; }
         bodyEl.style.display = 'none';
         ui.style.resize = 'none';
-        // compute compact height = header + footer + padding
         const headH = headEl.offsetHeight || 38;
-        const barH  = (ui.querySelector('#fbp-bar').offsetHeight || 46);
-        const compact = headH + barH + 16; // +padding
-        ui.style.height = compact + 'px';
-        // allow narrow minimized width too
+        const barH  = barEl.offsetHeight || 46;
+        ui.style.height = (headH + barH + 16) + 'px';
         ui.style.width = Math.max(MIN_W, Math.min(lastSize.w || DEFAULT_W, DEFAULT_W)) + 'px';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
         moveBar(true);
       }else{
         bodyEl.style.display = 'flex';
         ui.style.resize = 'both';
-        // restore previous size (clamped to floors)
         if(lastSize.w) ui.style.width  = Math.max(lastSize.w, MIN_W) + 'px';
         if(lastSize.h) ui.style.height = Math.max(lastSize.h, MIN_PANEL_HEIGHT) + 'px';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
@@ -251,14 +250,14 @@
     minBtn.addEventListener('click', ()=>applyMin(!minimized));
     applyMin(minimized);
 
+    // Persist size and enforce floors
     const ro = new ResizeObserver(entries=>{
       for(const e of entries){
         if(minimized) return;
         const w = Math.max(Math.round(e.contentRect.width), MIN_W);
         const h = Math.max(Math.round(e.contentRect.height), MIN_PANEL_HEIGHT);
-        // enforce min height/width while dragging
-        if(ui.offsetWidth < w)  ui.style.width  = w + 'px';
-        if(ui.offsetHeight < h) ui.style.height = h + 'px';
+        ui.style.width  = w + 'px';
+        ui.style.height = h + 'px';
         localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
       }
     });
@@ -274,13 +273,13 @@
   }
   function toast(msg, ms=1600){
     const t=document.createElement('div');
-    Object.assign(t.style,{ background:'#1b5cff', color:'#fff', padding:'10px 12px', borderRadius:'10px', boxShadow:'0 8px 22px rgba(0,0,0,.35)', font:'12px system-ui, -apple-system, Segoe UI, Roboto', maxWidth:'280px' });
+    Object.assign(t.style,{ background:'#1b5cff', color:'#fff', padding:'10px 12px', borderRadius:'10px', boxShadow:'0 8px 22px rgba(0,0,0,.35)', font:'12px system-ui,-apple-system, Segoe UI, Roboto', maxWidth:'280px' });
     t.textContent=msg; toastWrap.appendChild(t);
     while(toastWrap.children.length>4){ toastWrap.firstChild.remove(); }
     setTimeout(()=>t.remove(), ms);
   }
 
-  // ===== draggable (persist) — whole top bar =====
+  // ===== draggable (persist)
   ;(function(){
     const head = ui.querySelector('#fbp-head');
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
@@ -309,7 +308,7 @@
     }, true);
   })();
 
-  // ===== modes (Likes / Shares / Comments) =====
+  // ===== modes (Likes / Shares / Comments)
   const modes=[{key:'likes',label:'Likes'},{key:'shares',label:'Shares'},{key:'comments',label:'Comments'}];
   const modeWrap=ui.querySelector('#fbp-modes'); let activeMode='likes'; const modeButtons={};
   function setActiveMode(k){
@@ -318,61 +317,53 @@
     if(modeButtons[k]) modeButtons[k].classList.add('active');
   }
   modes.forEach(m=>{
-    const b=document.createElement('div');
-    b.className='fbp-chip'; b.textContent=m.label; b.dataset.mode=m.key; b.setAttribute('role','button'); b.tabIndex=0;
+    const b=document.createElement('div'); b.className='fbp-chip'; b.textContent=m.label; b.dataset.mode=m.key; b.setAttribute('role','button'); b.tabIndex=0;
     b.addEventListener('click',()=>setActiveMode(m.key));
     b.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); setActiveMode(m.key);} });
     modeWrap.appendChild(b); modeButtons[m.key]=b;
   });
   setActiveMode('likes');
 
-  // ===== refs & utils =====
-  const prevBox=ui.querySelector('#fbp-prev');
-  const likeC=ui.querySelector('#fbp-likec');
-  const commentC=ui.querySelector('#fbp-commentc');
-  const shareC=ui.querySelector('#fbp-sharec');
-  const postKeyEl=ui.querySelector('#fbp-postkey');
-  const statusEl=ui.querySelector('#fbp-status');
-
-  const led = ui.querySelector('#fbp-led');
-  const runtext = ui.querySelector('#fbp-runtext');
-  const prog = ui.querySelector('#fbp-prog');
-  const opsEl = ui.querySelector('#fbp-ops');
-
-  const btnPause = ui.querySelector('#fbp-pause');
-  const btnStop  = ui.querySelector('#fbp-stop');
-  const btnDL    = ui.querySelector('#fbp-dl');
-  const btnReset = ui.querySelector('#fbp-reset');
+  // ===== refs & utils (single, non-duplicated)
+  const prevBox   = ui.querySelector('#fbp-prev');
+  const likeC     = ui.querySelector('#fbp-likec');
+  const commentC  = ui.querySelector('#fbp-commentc');
+  const shareC    = ui.querySelector('#fbp-sharec');
+  const statusEl  = ui.querySelector('#fbp-status');
+  const led       = ui.querySelector('#fbp-led');
+  const runtext   = ui.querySelector('#fbp-runtext');
+  const prog      = ui.querySelector('#fbp-prog');
+  const opsEl     = ui.querySelector('#fbp-ops');
+  const btnPause  = ui.querySelector('#fbp-pause');
+  const btnStop   = ui.querySelector('#fbp-stop');
+  const btnDL     = ui.querySelector('#fbp-dl');
+  const btnReset  = ui.querySelector('#fbp-reset');
 
   let POST_URL=location.href;
   function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
-  let POST_KEY=postKeyFromURL(POST_URL);
   function setPostKeyLabel(){
-    const short=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY);
-    postKeyEl.innerHTML='<a href="'+POST_KEY+'" target="_blank" title="'+POST_KEY+'">'+short+'</a>';
+    const postKeyEl=ui.querySelector('#fbp-postkey');
+    const key=postKeyFromURL(POST_URL);
+    const short=(key.length>42? (key.slice(0,42)+'…'):key);
+    postKeyEl.innerHTML='<a href="'+key+'" target="_blank" title="'+key+'">'+short+'</a>';
   }
   setPostKeyLabel();
-
-  ;(function(){
-    function refreshPostKey(){
-      POST_URL = location.href;
-      POST_KEY = postKeyFromURL(POST_URL);
-      setPostKeyLabel();
-    }
+  (function(){
+    function refreshPostKey(){ POST_URL = location.href; setPostKeyLabel(); }
     const _push = history.pushState, _replace = history.replaceState;
     history.pushState = function(){ const r=_push.apply(this, arguments); refreshPostKey(); return r; };
     history.replaceState = function(){ const r=_replace.apply(this, arguments); refreshPostKey(); return r; };
-    window.addEventListener('popstate', refreshPostKey);
-    let last = location.href;
-    setInterval(()=>{ if(location.href!==last){ last=location.href; refreshPostKey(); } },1000);
+    addEventListener('popstate', refreshPostKey);
+    let last = location.href; setInterval(()=>{ if(location.href!==last){ last=location.href; refreshPostKey(); } },1000);
   })();
-
   ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
     try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }
     catch{ toast('Could not copy URL'); }
   });
 
+  // ===== store & helpers
   const store=new Map(); const counts={likes:0,comments:0,shares:0};
+  function updateStats(){ likeC.textContent=counts.likes; commentC.textContent=counts.comments; shareC.textContent=counts.shares; }
   function resetForThisPost(){ store.clear(); counts.likes=counts.comments=counts.shares=0; updateStats(); renderPreview(); }
 
   function isScrollableY(n){const cs=getComputedStyle(n); return /(auto|scroll)/.test(cs.overflowY)&&n.scrollHeight>n.clientHeight+20;}
@@ -426,7 +417,6 @@
       return a;
     } return null;
   }
-
   function sharerAnchors(root){
     const R = root || sc;
     const sel='[data-ad-rendering-role="profile_name"] a[href], h3 a[href]';
@@ -450,7 +440,6 @@
     const head = norm(Array.from(dlg.querySelectorAll('h1,h2,h3,[role="heading"]')).slice(0,2).map(e=>e.textContent||'').join(' '));
     return (aria + ' ' + head);
   }
-
   function resolvePostURL(dlg){
     const cand = new Set();
     const add = (h) => { const u = normalizeFB(h); if(u) cand.add(u); };
@@ -467,7 +456,6 @@
     let best=null, bestScore=-1; cand.forEach(u=>{ const s=score(u); if(s>bestScore){ best=u; bestScore=s; }});
     return best || location.href;
   }
-
   function isSharesPanel(container){
     const dlg = getDialog(container);
     const text = dialogText(dlg);
@@ -476,7 +464,6 @@
     if (/\bshares?\b/i.test(text) && !/\bcomment/i.test(text)) return true;
     return false;
   }
-
   function detectPanelType(container){
     if (isSharesPanel(container)) return 'shares';
     const dlg = container.closest && container.closest('[role="dialog"]');
@@ -495,7 +482,6 @@
     return 'unknown';
   }
 
-  function updateStats(){ likeC.textContent=counts.likes; commentC.textContent=counts.comments; shareC.textContent=counts.shares; }
   function upsertRow(name,url,mode){
     if(!name||!url) return; if(!looksLikeProfile(url)) return;
     const key=url;
@@ -510,22 +496,15 @@
 
   let lastRender=0; function maybeRender(force=false){ const t=Date.now(); if(force || t-lastRender>900){ renderPreview(); lastRender=t; } else { updateStats(); } }
 
-  // ===== PREVIEW =====
+  // ===== PREVIEW
   function renderPreview(){
     const rows = Array.from(store.values());
-    if(rows.length === 0){
-      prevBox.style.height = '80px';
-      prevBox.style.overflowY = 'hidden';
-    }else{
-      prevBox.style.height = 'clamp(120px,18vh,230px)';
-      prevBox.style.overflowY = 'auto';
-    }
+    if(rows.length === 0){ prevBox.style.height='80px'; prevBox.style.overflowY='hidden'; }
+    else { prevBox.style.height='clamp(120px,18vh,230px)'; prevBox.style.overflowY='auto'; }
 
     let head =
       '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
-        '<colgroup>' +
-          '<col style="width:44%"><col style="width:36%"><col style="width:6%"><col style="width:6%"><col style="width:8%">' +
-        '</colgroup>' +
+        '<colgroup><col style="width:44%"><col style="width:36%"><col style="width:6%"><col style="width:6%"><col style="width:8%"></colgroup>' +
         '<thead><tr style="position:sticky;top:0;background:#10131a">' +
           '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person_Name</th>' +
           '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person</th>' +
@@ -534,10 +513,11 @@
           '<th title="Comment" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">💬</th>' +
         '</tr></thead><tbody>';
 
-    let body = '';
-    for(let i=0;i<Math.min(rows.length,50);i++){
-      const r = rows[i];
-      body += '<tr>' +
+    let body='';
+    const n=Math.min(rows.length,50);
+    for(let i=0;i<n;i++){
+      const r=rows[i];
+      body+='<tr>' +
         '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escapeHTML(r.Person_Name)+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
         '<td style="padding:6px;border-bottom:1px solid #222;text-align:center">'+r.Like+'</td>' +
@@ -548,7 +528,6 @@
     prevBox.innerHTML = head + body + '</tbody></table>';
     updateStats();
   }
-
   function escapeHTML(s){ return (s||'').replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
   function shorten(s,n){ s=String(s||''); return s.length>n ? (s.slice(0,n-1)+'…') : s; }
 
@@ -562,10 +541,10 @@
     document.body.appendChild(link); link.click(); link.remove();
   }
 
-  // ===== Live run indicator =====
+  // ===== Live run indicator
   let heartbeat=null, actionsThisRun=0, currentRunStarted=0;
   function setRunningState(state){
-    const setLED = (el,color,anim)=>{ if(!el) return; el.style.background=color; el.style.animation=anim?'fbp-pulse 1.6s infinite':'none'; };
+    const setLED=(el,color,anim)=>{ if(!el) return; el.style.background=color; el.style.animation=anim?'fbp-pulse 1.6s infinite':'none'; };
     if(state==='running'){ setLED(led,'#24d05a',true); runtext.textContent='Running'; }
     if(state==='paused'){ setLED(led,'#ffcc00',true); runtext.textContent='Paused'; }
     if(state==='backoff'){ setLED(led,'#ff6a00',true); runtext.textContent='Backoff'; }
@@ -576,9 +555,7 @@
     stopHeartbeat(); currentRunStarted = started; actionsThisRun = 0; setRunningState('running');
     heartbeat = setInterval(()=>{
       const elapsed = now() - currentRunStarted;
-      const cur = (activeMode === 'likes'    ? counts.likes
-           : activeMode === 'comments' ? counts.comments
-           :                             counts.shares);
+      const cur = (activeMode === 'likes' ? counts.likes : activeMode === 'comments' ? counts.comments : counts.shares);
       const pct = Math.min(100, Math.round((cur / LIMITS.SOFT_ROW_CAP) * 100));
       prog.style.width = pct + '%';
       const mins = Math.max(0.016, elapsed/60000);
@@ -591,7 +568,6 @@
     refreshControls();
   }
   function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunningState('idle'); }
-
   function refreshControls(){
     const running = !!heartbeat;
     btnPause.disabled = !running;
@@ -599,29 +575,19 @@
     btnPause.textContent = (running && pausedByUser) ? '▶' : '⏸';
     btnPause.title = (running && pausedByUser) ? 'Resume' : 'Pause';
   }
-
   function setPaused(p){
     pausedByUser = !!p;
     const running = !!heartbeat;
-    if(running){
-      setRunningState(pausedByUser ? 'paused' : 'running');
-    }else{
-      setRunningState('idle');
-    }
+    if(running){ setRunningState(pausedByUser ? 'paused' : 'running'); }
+    else { setRunningState('idle'); }
     refreshControls();
   }
-
   btnPause.addEventListener('click',()=>setPaused(!pausedByUser));
-  btnStop.addEventListener('click', ()=>{
-    runToken++; // invalidate
-    stopHeartbeat();
-    setPaused(false);
-    setUIBusy(false, 'Stopped');
-  });
+  btnStop.addEventListener('click', ()=>{ runToken++; stopHeartbeat(); setPaused(false); setUIBusy(false, 'Stopped'); });
   btnDL.addEventListener('click', downloadMerged);
   btnReset.addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
 
-  // ===== Run control =====
+  // ===== Run control
   let runToken=0;
   function setUIBusy(busy, label){
     const btn = ui.querySelector('#fbp-go');
@@ -635,12 +601,10 @@
   ui.querySelector('#fbp-go').addEventListener('click', async function(){
     setPaused(false);
     toast('Click inside the open panel…', 1800);
-
     const ev = await new Promise(function(res){
       const h = function(e){ document.removeEventListener('click', h, true); res(e); };
       document.addEventListener('click', h, true);
     });
-
     const seed = ev.target;
     let c = closestScrollable(seed);
     if(!c){
@@ -658,7 +622,6 @@
 
     const dlg = getDialog(sc);
     POST_URL = resolvePostURL(dlg);
-    POST_KEY = postKeyFromURL(POST_URL);
     setPostKeyLabel();
 
     const myToken = ++runToken;
@@ -676,17 +639,15 @@
     else { toast('Done for this mode ✓'); }
   });
 
-  // ===== Runners =====
+  // ===== Runners (unchanged logic)
   async function runLikes(token){
     const kind = detectPanelType(sc);
     if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
-    const started = now();
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
+    const started = now(); let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
       if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
       if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
-
       let grew=false, found=0;
       likeItems().forEach(it=>{
         const a = pickLikeAnchor(it); if(!a) return;
@@ -697,39 +658,25 @@
         if(store.size>before){ grew=true; found++; }
       });
       counts.likes = Array.from(store.values()).filter(r=>r.Like==='Yes').length;
-
-      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; }
-      else { emptyPass=0; Throttle.ease(); }
-
+      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; } else { emptyPass=0; Throttle.ease(); }
       maybeRender(grew);
-
       if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
-
       await Throttle.politeWait(PAUSE.likes);
-
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
-
       const bodyTxt = document.body.innerText.toLowerCase();
-      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 2000);
-        Throttle.backoff(true);
-        break;
-      }
+      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){ toast('Temporary block text detected. Cooling down.', 2000); Throttle.backoff(true); break; }
     }
     maybeRender(true);
   }
-
   async function runComments(token){
     const dlg=getDialog(sc); const text=dialogText(dlg);
     if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
     if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
-    const started = now();
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
+    const started = now(); let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<320 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
       if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
       if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
-
       let grew=false, found=0;
       commentArticles().forEach(art=>{
         const a = pickCommentAnchor(art); if(!a) return;
@@ -739,47 +686,31 @@
         const before = store.size; upsertRow(name,url,'comments');
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
-
       let clicked=0;
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
         if(clicked>=2) return;
         const t=(b.innerText||'').toLowerCase();
         if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')){ b.click(); clicked++; actionsThisRun++; }
       });
-
       counts.comments = Array.from(store.values()).filter(r=>r.Comment==='Yes').length;
-
-      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; }
-      else { emptyPass=0; Throttle.ease(); }
-
+      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; } else { emptyPass=0; Throttle.ease(); }
       maybeRender(grew);
-
       if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
-
       await Throttle.politeWait(PAUSE.comments);
-
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
-
       const bodyTxt = document.body.innerText.toLowerCase();
-      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 2000);
-        Throttle.backoff(true);
-        break;
-      }
+      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){ toast('Temporary block text detected. Cooling down.', 2000); Throttle.backoff(true); break; }
     }
     if(!anyFound) toast('No comments found in this panel.', 1400);
     maybeRender(true);
   }
-
   async function runShares(token){
     if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
-    const started = now();
-    let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
+    const started = now(); let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
     for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
       if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
       if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
-
       let grew=false, found=0;
       const as = sharerAnchors(sc);
       as.forEach(a=>{
@@ -790,75 +721,19 @@
         if(store.size>before){ grew=true; found++; anyFound=true; }
       });
       counts.shares = Array.from(store.values()).filter(r=>r.Share==='Yes').length;
-
-      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; }
-      else { emptyPass=0; Throttle.ease(); }
-
+      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; } else { emptyPass=0; Throttle.ease(); }
       maybeRender(grew);
-
       if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
-
       await Throttle.politeWait(PAUSE.shares);
-
       const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
-
       const bodyTxt = document.body.innerText.toLowerCase();
-      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 2000);
-        Throttle.backoff(true);
-        break;
-      }
+      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){ toast('Temporary block text detected. Cooling down.', 2000); Throttle.backoff(true); break; }
     }
     if(!anyFound) toast('No shares found in this panel.', 1400);
     maybeRender(true);
   }
 
-  // ===== Toast helper
-  function toast(msg, ms=1600){
-    let wrap = document.getElementById('fbp-toastwrap');
-    if(!wrap){
-      wrap = Object.assign(document.createElement('div'), { id:'fbp-toastwrap' });
-      Object.assign(wrap.style, { position:'fixed', right:'18px', bottom:'18px', display:'flex', flexDirection:'column', gap:'8px', alignItems:'flex-end', zIndex:2147483647 });
-      document.body.appendChild(wrap);
-    }
-    const t=document.createElement('div');
-    Object.assign(t.style,{ background:'#1b5cff', color:'#fff', padding:'10px 12px', borderRadius:'10px', boxShadow:'0 8px 22px rgba(0,0,0,.35)', font:'12px system-ui,-apple-system, Segoe UI, Roboto', maxWidth:'280px' });
-    t.textContent=msg; wrap.appendChild(t);
-    while(wrap.children.length>4){ wrap.firstChild.remove(); }
-    setTimeout(()=>t.remove(), ms);
-  }
-
-  // ===== initial render
-  const prevBox=ui.querySelector('#fbp-prev');
-  const likeC=ui.querySelector('#fbp-likec');
-  const commentC=ui.querySelector('#fbp-commentc');
-  const shareC=ui.querySelector('#fbp-sharec');
-  function updateStats(){ likeC.textContent=counts.likes; commentC.textContent=counts.comments; shareC.textContent=counts.shares; }
-
+  // initial render
   renderPreview();
 
-  // ===== clipboard + URL chip
-  let POST_URL=location.href, POST_KEY=(new URL(location.href)).toString();
-  function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
-  function setPostKeyLabel(){
-    const postKeyEl=ui.querySelector('#fbp-postkey');
-    POST_KEY=postKeyFromURL(POST_URL);
-    const short=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY);
-    postKeyEl.innerHTML='<a href="'+POST_KEY+'" target="_blank" title="'+POST_KEY+'">'+short+'</a>';
-  }
-  setPostKeyLabel();
-  (function(){
-    function refreshPostKey(){ POST_URL=location.href; setPostKeyLabel(); }
-    const _push=history.pushState, _replace=history.replaceState;
-    history.pushState=function(){ const r=_push.apply(this,arguments); refreshPostKey(); return r; };
-    history.replaceState=function(){ const r=_replace.apply(this,arguments); refreshPostKey(); return r; };
-    addEventListener('popstate', refreshPostKey);
-    let last=location.href; setInterval(()=>{ if(location.href!==last){ last=location.href; refreshPostKey(); } },1000);
-  })();
-  ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
-    try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }
-    catch{ toast('Could not copy URL'); }
-  });
-
-  // (The rest of the run logic is identical to the previous working version and kept above.)
 })();
