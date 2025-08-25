@@ -1,5 +1,5 @@
-// FB People Scraper — v17o-fix: chips visible, URL visible/copyable, footer never overlaps
-(async function FB_Export_Persons_UNIFIED_v17o_fix(){
+// FB People Scraper — v17o_fix + sticky footer + mini controls on minimize
+(async function FB_Export_Persons_UNIFIED_v17o_sticky(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
@@ -74,10 +74,10 @@
       #fbp-postkey a{ color:#8ab4ff !important; text-decoration:none }
       #fbp-postkey a:hover{ text-decoration:underline }
 
-      /* Chips: use divs (FB styles sometimes mess with <button>) */
+      /* Chips */
       .fbp-chip{
         display:inline-flex; align-items:center;
-        padding:6px 10px; margin:0; border-radius:999px;
+        padding:6px 10px; border-radius:999px;
         border:1px solid #384155; background:#171a20; color:#e6e6e6;
         cursor:pointer; user-select:none; font:12px system-ui,-apple-system,Segoe UI,Roboto;
       }
@@ -97,7 +97,8 @@
       #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; line-height:1; font-size:16px; font-weight:700; border-radius:8px; }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px 8px 6px; }
+      /* Make body the scroll container so footer can stick to its bottom */
+      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:140px; padding:6px 6px 8px 6px; }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
@@ -105,14 +106,23 @@
       /* Preview */
       #fbp-prev{ border:1px solid #293042;border-radius:8px; }
 
-      /* Footer under preview (no overlap) */
+      /* Footer: stick to bottom of scrollable body (no overlap) */
       .fbp-bar{
+        position:sticky; bottom:0; z-index:2;
         display:flex; align-items:center; gap:8px; margin-top:8px;
         background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px;
         box-shadow:0 8px 22px rgba(0,0,0,.35);
       }
       .fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
       .fbp-bar .grow{ flex:1 }
+
+      /* Compact bar shown in header when minimized */
+      .fbp-bar.mini{
+        position:static; margin:0 6px 0 auto; padding:0; border:none; background:transparent; box-shadow:none; gap:6px;
+      }
+      .fbp-bar.mini .grow{ display:none }
+      .fbp-bar.mini .iconbtn{ width:34px; height:28px }
+      .fbp-bar.mini #fbp-dl{ padding:0 8px }
     `;
     document.head.appendChild(style);
   })();
@@ -194,10 +204,25 @@
   ui.querySelector('#fbp-close').addEventListener('click', ()=>ui.remove());
   (function(){
     const bodyEl = ui.querySelector('#fbp-body');
+    const headEl = ui.querySelector('#fbp-head');
+    const previewWrap = ui.querySelector('#fbp-preview-wrap');
+    const barEl = ui.querySelector('#fbp-bar');
     const minBtn = ui.querySelector('#fbp-min');
 
     let minimized = localStorage.getItem('fbp_ui_min') === '1';
     let lastSize = { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
+
+    function moveBarToMini(min){
+      if(min){
+        headEl.appendChild(barEl);
+        barEl.classList.add('mini');
+        const dl = ui.querySelector('#fbp-dl'); if(dl) dl.textContent = '⬇';
+      }else{
+        previewWrap.appendChild(barEl);
+        barEl.classList.remove('mini');
+        const dl = ui.querySelector('#fbp-dl'); if(dl) dl.textContent = '⬇ Download CSV';
+      }
+    }
 
     function applyMin(min){
       minimized = min;
@@ -209,12 +234,14 @@
         ui.style.height = '';
         ui.style.resize = 'none';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
+        moveBarToMini(true);
       }else{
         bodyEl.style.display = 'flex';
         if(lastSize.w) ui.style.width = Math.max(lastSize.w, 420) + 'px';
         if(lastSize.h) ui.style.height = lastSize.h+'px';
         ui.style.resize = 'both';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
+        moveBarToMini(false);
       }
     }
     minBtn.addEventListener('click', ()=>applyMin(!minimized));
@@ -284,7 +311,7 @@
     if(modeButtons[k]) modeButtons[k].classList.add('active');
   }
   modes.forEach(m=>{
-    const b=document.createElement('div'); // div instead of button
+    const b=document.createElement('div');
     b.className='fbp-chip'; b.textContent=m.label; b.dataset.mode=m.key; b.setAttribute('role','button'); b.tabIndex=0;
     b.addEventListener('click',()=>setActiveMode(m.key));
     b.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); setActiveMode(m.key);} });
