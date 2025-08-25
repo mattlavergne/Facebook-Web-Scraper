@@ -1,7 +1,7 @@
 // FB People Scraper — v17o_sticky_min2 (fix duplicate vars): sticky footer, min-height floor, header+footer-only minimize, narrower width, recenter hotkey
 (async function FB_Export_Persons_UNIFIED_v17o_sticky_min2(){
   let MIN_PANEL_HEIGHT = 300;   // smallest non-minimized height
-  const DEFAULT_W = 400, MIN_W = 340;
+  const DEFAULT_W = 400, MIN_W = 340, DEFAULT_H = 500; // default non-minimized dimensions
   const PANEL_PADDING = '0 0 8px 0';
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -117,7 +117,7 @@
   Object.assign(ui.style, {
     position:'fixed', right:'16px', top:'16px',
     width: DEFAULT_W+'px', minWidth: MIN_W+'px', maxWidth:'92vw',
-    minHeight: MIN_PANEL_HEIGHT+'px',
+    minHeight: MIN_PANEL_HEIGHT+'px', height: DEFAULT_H+'px',
     background:'#242526', color:'#e4e6eb', font:'12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
     border:'1px solid #3a3b3c', borderRadius:'12px', boxShadow:'0 4px 12px rgba(0,0,0,.2)',
     zIndex:2147483647, padding:PANEL_PADDING,
@@ -129,7 +129,7 @@
     const sz = JSON.parse(localStorage.getItem('fbp_ui_size')||'null');
     if(sz && sz.w && sz.h){
       ui.style.width  = Math.max(sz.w, MIN_W) + 'px';
-      ui.style.height = Math.max(sz.h, MIN_PANEL_HEIGHT) + 'px';
+      ui.style.height = Math.max(sz.h, MIN_PANEL_HEIGHT, DEFAULT_H) + 'px';
     }
   }catch{}
 
@@ -189,7 +189,7 @@
   try{
     const headH = ui.querySelector('#fbp-head')?.offsetHeight || 38;
     const barH  = ui.querySelector('#fbp-bar')?.offsetHeight || 46;
-    MIN_PANEL_HEIGHT = headH + barH + 20;
+    MIN_PANEL_HEIGHT = Math.max(MIN_PANEL_HEIGHT, headH + barH + 20);
     ui.style.minHeight = MIN_PANEL_HEIGHT + 'px';
   }catch{}
 
@@ -229,7 +229,7 @@
     let saved = null;
     try{ saved = JSON.parse(localStorage.getItem('fbp_ui_size')||'null'); }catch{}
     let lastSize = (saved && saved.w && saved.h)
-      ? { w: saved.w, h: saved.h }
+      ? { w: Math.max(saved.w, MIN_W), h: Math.max(saved.h, DEFAULT_H) }
       : { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
 
     function moveBar(min){
@@ -258,7 +258,7 @@
         ui.style.minHeight = MIN_PANEL_HEIGHT + 'px';
         ui.style.padding = PANEL_PADDING;
         if(lastSize.w) ui.style.width  = Math.max(lastSize.w, MIN_W) + 'px';
-        if(lastSize.h) ui.style.height = Math.max(lastSize.h, MIN_PANEL_HEIGHT) + 'px';
+        if(lastSize.h) ui.style.height = Math.max(lastSize.h, MIN_PANEL_HEIGHT, DEFAULT_H) + 'px';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
         moveBar(false);
       }
@@ -267,16 +267,14 @@
     applyMin(minimized);
 
     // Persist size and enforce floors
-    const ro = new ResizeObserver(entries=>{
-      for(const e of entries){
-        if(minimized) return;
-        const w = Math.max(Math.round(e.contentRect.width), MIN_W);
-        const h = Math.max(Math.round(e.contentRect.height), MIN_PANEL_HEIGHT);
-        ui.style.width  = w + 'px';
-        ui.style.height = h + 'px';
-        localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
-        lastSize = { w, h };
-      }
+    const ro = new ResizeObserver(()=>{
+      if(minimized) return;
+      let w = Math.max(parseInt(getComputedStyle(ui).width,10), MIN_W);
+      let h = Math.max(parseInt(getComputedStyle(ui).height,10), MIN_PANEL_HEIGHT);
+      ui.style.width  = w + 'px';
+      ui.style.height = h + 'px';
+      localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
+      lastSize = { w, h };
     });
     ro.observe(ui);
   })();
