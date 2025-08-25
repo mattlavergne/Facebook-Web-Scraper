@@ -99,6 +99,7 @@
         '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
         '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
         '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
+        '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn round" style="width:28px;text-align:center">–</button>' +
       '</div>' +
       '<div style="font-weight:700">FB People Scraper</div>' +
       '<div style="margin-left:auto;display:flex;align-items:center;gap:6px">' +
@@ -153,24 +154,30 @@
     '</div>';
   document.body.appendChild(ui);
 
-  // ===== Minimize / persist =====
-  const bodyEl = ui.querySelector('#fbp-body');
-  const minBtn = ui.querySelector('#fbp-min');
-  function applyMinimized(min){
-    ui.dataset.min = min ? '1' : '0';
-    bodyEl.style.display = min ? 'none' : 'grid';
-    minBtn.textContent = min ? '+' : '–';
-    minBtn.title = min ? 'Expand' : 'Minimize';
-    localStorage.setItem('fbp_ui_min', min ? '1' : '0');
-    ui.style.padding = min ? '8px' : '12px';
-    ui.style.width = min ? '260px' : '360px';
-    ui.style.maxWidth = ui.style.width;
-  }
-  const savedMin = localStorage.getItem('fbp_ui_min') === '1';
-  applyMinimized(savedMin);
-  minBtn.addEventListener('click', ()=>applyMinimized(!(ui.dataset.min==='1')));
-  ui.querySelector('#fbp-head').addEventListener('dblclick', ()=>minBtn.click());
-  ui.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='m') minBtn.click(); });
+  // ===== Minimize / persist (drop-in) =====
+  (function(){
+    const bodyEl = ui.querySelector('#fbp-body');
+    const minBtn = ui.querySelector('#fbp-min');
+  
+    function applyMinimized(min){
+      ui.dataset.min = min ? '1' : '0';
+      bodyEl.style.display = min ? 'none' : 'grid';
+      minBtn.textContent = min ? '+' : '–';
+      minBtn.title = min ? 'Expand' : 'Minimize';
+      localStorage.setItem('fbp_ui_min', min ? '1' : '0');
+      ui.style.padding = min ? '8px' : '12px';
+      ui.style.width = min ? '260px' : '360px';
+      ui.style.maxWidth = ui.style.width;
+    }
+  
+    const savedMin = localStorage.getItem('fbp_ui_min') === '1';
+    applyMinimized(savedMin);
+  
+    minBtn.addEventListener('click', ()=>applyMinimized(!(ui.dataset.min==='1')));
+    ui.querySelector('#fbp-head').addEventListener('dblclick', ()=>minBtn.click());
+    ui.addEventListener('keydown', e=>{ if((e.key||'').toLowerCase()==='m') minBtn.click(); });
+  })();
+
 
   // ===== Sticky HUD (always visible) =====
   const hud = Object.assign(document.createElement('div'), { id:'fbp-hud' });
