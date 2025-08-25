@@ -1,10 +1,10 @@
-// FB People Scraper — faster run, FB-styled header, fixed window buttons, no outer scrollbars,
-// reliable minimize/restore, pause/stop correctness, preview-only scrolling, item-based progress.
-(async function FB_Export_Persons_UNIFIED_v17n(){
+// FB People Scraper — non-overlapping footer (icon buttons), compact counters, FB header,
+// faster run, reliable pause/stop, preview-only scrolling.
+(async function FB_Export_Persons_UNIFIED_v17p(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Faster tuning (still polite) =====
-  const PAUSE = { likes: 1100, comments: 1300, shares: 1500 }; // ms between cycles
+  const PAUSE = { likes: 1100, comments: 1300, shares: 1500 };
   const STABLE_LIMIT = 8;
   const EMPTY_PASSES = 3;
 
@@ -56,15 +56,16 @@
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
+      :root { --fbp-footer-h: 52px; }
       @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
       #fbp-panel, #fbp-panel * { box-sizing:border-box }
-      #fbp-panel { display:flex; flex-direction:column; overflow:hidden } /* no scrollbars on the panel */
+      #fbp-panel { display:flex; flex-direction:column; overflow:hidden } /* no outer scrollbars */
       #fbp-panel button { transition: transform .06s ease, background-color .12s ease, border-color .12s ease, opacity .12s ease; }
       #fbp-panel button:active { transform: translateY(1px) scale(.99); }
 
       /* FB dark header styling — sticky, draggable from the whole bar */
       #fbp-head{
-        position:sticky; top:0; z-index:2;
+        position:sticky; top:0; z-index:3;
         background:#1d2129;
         height:38px; display:flex; align-items:center; gap:8px;
         padding:0 8px 6px 10px; cursor:grab;
@@ -87,19 +88,28 @@
       .fbp-btn:hover{ filter:brightness(1.06) }
       .fbp-btn:disabled{ opacity:.65; cursor:not-allowed }
 
-      /* Fixed-size window buttons that DON'T resize and don't overlap */
+      /* Fixed-size window buttons */
       #fbp-win{ display:flex; gap:6px; margin-left:auto }
-      #fbp-win .winbtn{
-        width:36px; height:28px; flex:0 0 36px;
-        display:grid; place-items:center; line-height:1;
-        font-size:16px; font-weight:700; border-radius:8px;
-      }
+      #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; font-size:16px; font-weight:700; border-radius:8px; }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px 8px 6px }
+      #fbp-body{ position:relative; flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:180px; padding:6px 6px calc(var(--fbp-footer-h) + 6px) 6px }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
+
+      /* Compact counters */
+      #fbp-stats .card{ flex:1; background:#141823; border:1px solid #293042; border-radius:8px; padding:8px; text-align:center; min-width:92px }
+      #fbp-stats .label{ opacity:.65; font-size:11px; display:flex; gap:6px; justify-content:center; align-items:center }
+      #fbp-stats .count{ font-weight:700; font-size:13px }
+
+      /* Footer (never overlaps) */
+      #fbp-footer{
+        position:absolute; left:0; right:0; bottom:0; height:var(--fbp-footer-h);
+        display:flex; align-items:center; gap:6px; padding:8px 8px;
+        background:#0f1115; border-top:1px solid #2a2f3a; z-index:2;
+      }
+      #fbp-footer .iconbtn{ width:36px; height:36px; display:grid; place-items:center; font-size:18px; border-radius:10px }
     `;
     document.head.appendChild(style);
   })();
@@ -115,7 +125,7 @@
     height:'', maxHeight:'72vh',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
-    zIndex:2147483647, padding:'0 0 8px 0',
+    zIndex:2147483647, padding:'0',
     resize:'both', overflow:'hidden'
   });
 
@@ -152,15 +162,9 @@
         '</div>' +
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap">' +
-        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:100px">' +
-          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">👍<span>Likes</span></div><div id="fbp-likec" style="font-weight:700">0</div>' +
-        '</div>' +
-        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:100px">' +
-          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">↗<span>Shares</span></div><div id="fbp-sharec" style="font-weight:700">0</div>' +
-        '</div>' +
-        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:100px">' +
-          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">💬<span>Comments</span></div><div id="fbp-commentc" style="font-weight:700">0</div>' +
-        '</div>' +
+        '<div class="card"><div class="label">👍<span>Likes</span></div><div id="fbp-likec" class="count">0</div></div>' +
+        '<div class="card"><div class="label">↗<span>Shares</span></div><div id="fbp-sharec" class="count">0</div></div>' +
+        '<div class="card"><div class="label">💬<span>Comments</span></div><div id="fbp-commentc" class="count">0</div></div>' +
       '</div>' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
@@ -168,12 +172,12 @@
         '</div>' +
         '<div id="fbp-prev" style="height:76px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;position:sticky;bottom:0;background:#0f1115;padding-top:4px">' +
-        '<button id="fbp-pause" class="fbp-btn warn">Pause</button>' +
-        '<button id="fbp-stop" class="fbp-btn warn">Stop</button>' +
-        '<button id="fbp-dl" class="fbp-btn green" style="flex:1">Download Merged CSV</button>' +
-        '<button id="fbp-reset" class="fbp-btn warn">Reset</button>' +
-      '</div>' +
+    '</div>' +
+    '<div id="fbp-footer">' +
+      '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause" aria-label="Pause">⏸</button>' +
+      '<button id="fbp-stop"  class="fbp-btn iconbtn" title="Stop"  aria-label="Stop">⏹</button>' +
+      '<button id="fbp-dl"    class="fbp-btn green" style="flex:1" title="Download Merged CSV" aria-label="Download">⭳ Download CSV</button>' +
+      '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset (clear data)" aria-label="Reset">↺</button>' +
     '</div>';
   document.body.appendChild(ui);
 
@@ -460,8 +464,6 @@
   // ===== PREVIEW =====
   function renderPreview(){
     const rows = Array.from(store.values());
-
-    // Only let the preview scroll when there is data
     if(rows.length === 0){
       prevBox.style.height = '76px';
       prevBox.style.overflowY = 'hidden';
@@ -539,18 +541,23 @@
   }
   function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunningState('idle'); }
 
-  // Pause/Stop correctness
+  // Pause/Stop correctness (icon toggle)
+  const pauseBtn = ui.querySelector('#fbp-pause');
   function setPaused(p){
     pausedByUser = !!p;
-    if(heartbeat){ // only meaningful during a run
-      ui.querySelector('#fbp-pause').textContent = pausedByUser ? 'Resume' : 'Pause';
+    if(heartbeat){
+      pauseBtn.textContent = pausedByUser ? '▶' : '⏸';
+      pauseBtn.title      = pausedByUser ? 'Resume' : 'Pause';
+      pauseBtn.setAttribute('aria-label', pauseBtn.title);
       setRunningState(pausedByUser ? 'paused' : 'running');
     }else{
-      ui.querySelector('#fbp-pause').textContent = 'Pause';
+      pauseBtn.textContent = '⏸';
+      pauseBtn.title = 'Pause';
+      pauseBtn.setAttribute('aria-label','Pause');
       setRunningState('idle');
     }
   }
-  ui.querySelector('#fbp-pause').addEventListener('click',()=>setPaused(!pausedByUser));
+  pauseBtn.addEventListener('click',()=>setPaused(!pausedByUser));
   ui.querySelector('#fbp-stop').addEventListener('click', ()=>{
     runToken++; stopHeartbeat(); setPaused(false); setUIBusy(false, 'Stopped'); toast('Stopped.');
   });
