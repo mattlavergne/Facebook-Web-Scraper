@@ -1,17 +1,16 @@
-// FB People Scraper — non-overlapping footer (icon buttons), compact counters, FB header,
-// faster run, reliable pause/stop, preview-only scrolling.
-(async function FB_Export_Persons_UNIFIED_v17p(){
+// FB People Scraper — preview-footer buttons, non-overlapping; pause/play icon; minimized keeps footer visible
+(async function FB_Export_Persons_UNIFIED_v17n(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  // ===== Faster tuning (still polite) =====
-  const PAUSE = { likes: 1100, comments: 1300, shares: 1500 };
-  const STABLE_LIMIT = 8;
-  const EMPTY_PASSES = 3;
+  // ===== Tuning knobs =====
+  const PAUSE = { likes: 1700, comments: 1900, shares: 2000 }; // slightly faster
+  const STABLE_LIMIT = 10;
+  const EMPTY_PASSES = 4;
 
   // ===== Politeness controls =====
-  const LIMITS = { MAX_ACTIONS_PER_MIN: 45, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
-  function jitter(ms, ratio=0.20){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
-  async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r,{timeout:900})); } }
+  const LIMITS = { MAX_ACTIONS_PER_MIN: 28, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
+  function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
+  async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r,{timeout:1200})); } }
   const now = ()=>performance.now();
 
   let pausedByUser = false;
@@ -21,13 +20,12 @@
   const Throttle = (()=> {
     let pauseMult = 1;
     let tokens = LIMITS.MAX_ACTIONS_PER_MIN, maxTokens = LIMITS.MAX_ACTIONS_PER_MIN;
-    const refillEvery = Math.max(250, Math.round(60000 / maxTokens));
-    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, refillEvery);
+    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 3000);
     function spend(){ if(tokens<=0) return false; tokens--; return true; }
-    function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 1.6 : 1.15)); }
-    function ease(){ pauseMult = Math.max(1, pauseMult * 0.85); }
+    function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 2.0 : 1.20)); }
+    function ease(){ pauseMult = Math.max(1, pauseMult * 0.90); }
     async function politeWait(base){
-      while(pausedByUser || pausedByHidden){ await new Promise(r=>setTimeout(r, 300)); }
+      while(pausedByUser || pausedByHidden){ await new Promise(r=>setTimeout(r, 400)); }
       await new Promise(r=>setTimeout(r, jitter(base * pauseMult)));
       await yieldToBrowser();
     }
@@ -40,13 +38,13 @@
     const origFetch = window.fetch;
     window.fetch = async (...args)=>{
       const res = await origFetch(...args);
-      if(res && (res.status===429 || res.status===403)){ throttleSignal=true; toast('Server throttle detected. Backing off.', 1800); Throttle.backoff(true); }
+      if(res && (res.status===429 || res.status===403)){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
       return res;
     };
     const origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function(...a){
       this.addEventListener('load', function(){
-        if(this.status===429 || this.status===403){ throttleSignal=true; toast('Server throttle detected. Backing off.', 1800); Throttle.backoff(true); }
+        if(this.status===429 || this.status===403){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
       });
       return origSend.apply(this, a);
     };
@@ -56,14 +54,14 @@
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
-      :root { --fbp-footer-h: 52px; }
+      :root{ --fbp-bar-h: 46px; }
       @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
       #fbp-panel, #fbp-panel * { box-sizing:border-box }
-      #fbp-panel { display:flex; flex-direction:column; overflow:hidden } /* no outer scrollbars */
+      #fbp-panel { display:flex; flex-direction:column; overflow:hidden }
       #fbp-panel button { transition: transform .06s ease, background-color .12s ease, border-color .12s ease, opacity .12s ease; }
       #fbp-panel button:active { transform: translateY(1px) scale(.99); }
 
-      /* FB dark header styling — sticky, draggable from the whole bar */
+      /* FB-like sticky header (draggable) */
       #fbp-head{
         position:sticky; top:0; z-index:3;
         background:#1d2129;
@@ -88,28 +86,23 @@
       .fbp-btn:hover{ filter:brightness(1.06) }
       .fbp-btn:disabled{ opacity:.65; cursor:not-allowed }
 
-      /* Fixed-size window buttons */
       #fbp-win{ display:flex; gap:6px; margin-left:auto }
-      #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; font-size:16px; font-weight:700; border-radius:8px; }
+      #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; line-height:1; font-size:16px; font-weight:700; border-radius:8px; }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      #fbp-body{ position:relative; flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:180px; padding:6px 6px calc(var(--fbp-footer-h) + 6px) 6px }
+      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px calc(var(--fbp-bar-h) + 8px) 6px; } /* reserve space for footer */
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
 
-      /* Compact counters */
-      #fbp-stats .card{ flex:1; background:#141823; border:1px solid #293042; border-radius:8px; padding:8px; text-align:center; min-width:92px }
-      #fbp-stats .label{ opacity:.65; font-size:11px; display:flex; gap:6px; justify-content:center; align-items:center }
-      #fbp-stats .count{ font-weight:700; font-size:13px }
-
-      /* Footer (never overlaps) */
-      #fbp-footer{
-        position:absolute; left:0; right:0; bottom:0; height:var(--fbp-footer-h);
-        display:flex; align-items:center; gap:6px; padding:8px 8px;
-        background:#0f1115; border-top:1px solid #2a2f3a; z-index:2;
+      /* Footer bar pinned to panel bottom; never overlaps content because of body padding-bottom */
+      #fbp-bar{
+        position:absolute; left:8px; right:8px; bottom:8px; height:var(--fbp-bar-h);
+        display:flex; align-items:center; gap:8px; z-index:2;
+        background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px; box-shadow:0 8px 22px rgba(0,0,0,.35);
       }
-      #fbp-footer .iconbtn{ width:36px; height:36px; display:grid; place-items:center; font-size:18px; border-radius:10px }
+      #fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
+      #fbp-bar .grow{ flex:1 }
     `;
     document.head.appendChild(style);
   })();
@@ -121,18 +114,18 @@
   const ui = Object.assign(document.createElement('div'), { id:'fbp-panel' });
   Object.assign(ui.style, {
     position:'fixed', right:'16px', top:'16px',
-    width:'460px', minWidth:'400px', maxWidth:'92vw',
+    width:'460px', minWidth:'420px', maxWidth:'92vw',
     height:'', maxHeight:'72vh',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
-    zIndex:2147483647, padding:'0',
+    zIndex:2147483647, padding:'0 0 8px 0',
     resize:'both', overflow:'hidden'
   });
 
   // restore size if saved
   try{
     const sz = JSON.parse(localStorage.getItem('fbp_ui_size')||'null');
-    if(sz && sz.w && sz.h){ ui.style.width = Math.max(sz.w, 400)+'px'; ui.style.height = sz.h+'px'; }
+    if(sz && sz.w && sz.h){ ui.style.width = sz.w+'px'; ui.style.height = sz.h+'px'; }
   }catch{}
 
   ui.innerHTML =
@@ -162,22 +155,28 @@
         '</div>' +
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap">' +
-        '<div class="card"><div class="label">👍<span>Likes</span></div><div id="fbp-likec" class="count">0</div></div>' +
-        '<div class="card"><div class="label">↗<span>Shares</span></div><div id="fbp-sharec" class="count">0</div></div>' +
-        '<div class="card"><div class="label">💬<span>Comments</span></div><div id="fbp-commentc" class="count">0</div></div>' +
+        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:98px">' +
+          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">👍<span>Likes</span></div><div id="fbp-likec" style="font-weight:700">0</div>' +
+        '</div>' +
+        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:98px">' +
+          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">↗<span>Shares</span></div><div id="fbp-sharec" style="font-weight:700">0</div>' +
+        '</div>' +
+        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:98px">' +
+          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">💬<span>Comments</span></div><div id="fbp-commentc" style="font-weight:700">0</div>' +
+        '</div>' +
       '</div>' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>Preview (first 50)</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="height:76px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
     '</div>' +
-    '<div id="fbp-footer">' +
-      '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause" aria-label="Pause">⏸</button>' +
-      '<button id="fbp-stop"  class="fbp-btn iconbtn" title="Stop"  aria-label="Stop">⏹</button>' +
-      '<button id="fbp-dl"    class="fbp-btn green" style="flex:1" title="Download Merged CSV" aria-label="Download">⭳ Download CSV</button>' +
-      '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset (clear data)" aria-label="Reset">↺</button>' +
+    '<div id="fbp-bar">' +
+      '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause">⏸</button>' +
+      '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
+      '<button id="fbp-dl" class="fbp-btn green grow" title="Download CSV">⬇ Download CSV</button>' +
+      '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset">↻</button>' +
     '</div>';
   document.body.appendChild(ui);
 
@@ -196,13 +195,13 @@
       if(min){
         if(ui.style.width || ui.style.height){ lastSize = { w: ui.offsetWidth, h: ui.offsetHeight }; }
         bodyEl.style.display = 'none';
-        ui.style.width = '400px';
+        ui.style.width = '420px';
         ui.style.height = '';
         ui.style.resize = 'none';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
       }else{
         bodyEl.style.display = 'flex';
-        if(lastSize.w) ui.style.width = Math.max(lastSize.w, 400) + 'px';
+        if(lastSize.w) ui.style.width = Math.max(lastSize.w, 420) + 'px';
         if(lastSize.h) ui.style.height = lastSize.h+'px';
         ui.style.resize = 'both';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
@@ -294,6 +293,11 @@
   const runtext = ui.querySelector('#fbp-runtext');
   const prog = ui.querySelector('#fbp-prog');
   const opsEl = ui.querySelector('#fbp-ops');
+
+  const btnPause = ui.querySelector('#fbp-pause');
+  const btnStop  = ui.querySelector('#fbp-stop');
+  const btnDL    = ui.querySelector('#fbp-dl');
+  const btnReset = ui.querySelector('#fbp-reset');
 
   let POST_URL=location.href;
   function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
@@ -459,16 +463,18 @@
     store.set(key, existing);
   }
 
-  let lastRender=0; function maybeRender(force=false){ const t=Date.now(); if(force || t-lastRender>800){ renderPreview(); lastRender=t; } else { updateStats(); } }
+  let lastRender=0; function maybeRender(force=false){ const t=Date.now(); if(force || t-lastRender>900){ renderPreview(); lastRender=t; } else { updateStats(); } }
 
   // ===== PREVIEW =====
   function renderPreview(){
     const rows = Array.from(store.values());
+
+    // Only let the preview scroll when there is data (max ~5–6 rows)
     if(rows.length === 0){
-      prevBox.style.height = '76px';
+      prevBox.style.height = '80px';
       prevBox.style.overflowY = 'hidden';
     }else{
-      prevBox.style.height = 'clamp(100px,18vh,220px)';
+      prevBox.style.height = 'clamp(120px,18vh,230px)'; // ~5–6 rows
       prevBox.style.overflowY = 'auto';
     }
 
@@ -521,14 +527,15 @@
     if(state==='paused'){ setLED(led,'#ffcc00',true); runtext.textContent='Paused'; }
     if(state==='backoff'){ setLED(led,'#ff6a00',true); runtext.textContent='Backoff'; }
     if(state==='idle'){ setLED(led,'#666',false); runtext.textContent='Idle'; prog.style.width='0%'; opsEl.textContent='0/min'; }
+    refreshControls();
   }
   function startHeartbeat(started){
     stopHeartbeat(); currentRunStarted = started; actionsThisRun = 0; setRunningState('running');
     heartbeat = setInterval(()=>{
       const elapsed = now() - currentRunStarted;
       const cur = (activeMode === 'likes'    ? counts.likes
-                 : activeMode === 'comments' ? counts.comments
-                 :                             counts.shares);
+           : activeMode === 'comments' ? counts.comments
+           :                             counts.shares);
       const pct = Math.min(100, Math.round((cur / LIMITS.SOFT_ROW_CAP) * 100));
       prog.style.width = pct + '%';
       const mins = Math.max(0.016, elapsed/60000);
@@ -538,29 +545,40 @@
       else if(throttleSignal){ setRunningState('backoff'); throttleSignal=false; }
       else setRunningState('running');
     }, 500);
+    refreshControls();
   }
   function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunningState('idle'); }
 
-  // Pause/Stop correctness (icon toggle)
-  const pauseBtn = ui.querySelector('#fbp-pause');
+  function refreshControls(){
+    const running = !!heartbeat;
+    btnPause.disabled = !running;
+    btnStop.disabled  = !running;
+    // icon toggle
+    btnPause.textContent = (running && pausedByUser) ? '▶' : '⏸';
+    btnPause.title = (running && pausedByUser) ? 'Resume' : 'Pause';
+  }
+
   function setPaused(p){
     pausedByUser = !!p;
-    if(heartbeat){
-      pauseBtn.textContent = pausedByUser ? '▶' : '⏸';
-      pauseBtn.title      = pausedByUser ? 'Resume' : 'Pause';
-      pauseBtn.setAttribute('aria-label', pauseBtn.title);
+    const running = !!heartbeat;
+    if(running){
       setRunningState(pausedByUser ? 'paused' : 'running');
     }else{
-      pauseBtn.textContent = '⏸';
-      pauseBtn.title = 'Pause';
-      pauseBtn.setAttribute('aria-label','Pause');
-      setRunningState('idle');
+      setRunningState('idle'); // never show running if no job
     }
+    refreshControls();
   }
-  pauseBtn.addEventListener('click',()=>setPaused(!pausedByUser));
-  ui.querySelector('#fbp-stop').addEventListener('click', ()=>{
-    runToken++; stopHeartbeat(); setPaused(false); setUIBusy(false, 'Stopped'); toast('Stopped.');
+
+  btnPause.addEventListener('click',()=>setPaused(!pausedByUser));
+  btnStop.addEventListener('click', ()=>{
+    // Stop current run without clearing data
+    runToken++; // invalidate
+    stopHeartbeat();
+    setPaused(false);
+    setUIBusy(false, 'Stopped');
   });
+  btnDL.addEventListener('click', downloadMerged);
+  btnReset.addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
 
   // ===== Run control =====
   let runToken=0;
@@ -570,11 +588,12 @@
     Object.values(modeButtons).forEach(b=>b.disabled = !!busy);
     btn.style.opacity = busy ? 0.7 : 1;
     if (label) statusEl.textContent = label;
+    refreshControls();
   }
 
   ui.querySelector('#fbp-go').addEventListener('click', async function(){
-    setPaused(false); // ensure not pre-paused
-    toast('Click inside the open panel…', 1400);
+    setPaused(false); // ensure not starting paused
+    toast('Click inside the open panel…', 1800);
 
     const ev = await new Promise(function(res){
       const h = function(e){ document.removeEventListener('click', h, true); res(e); };
@@ -590,10 +609,10 @@
     sc = c || document.scrollingElement || document.body;
 
     const detected = detectPanelType(sc);
-    if (detected !== 'unknown' && detected !== activeMode) { setActiveMode(detected); toast('Detected ' + detected + ' panel — switching mode.', 1200); }
+    if (detected !== 'unknown' && detected !== activeMode) { setActiveMode(detected); toast('Detected ' + detected + ' panel — switching mode.', 1400); }
     if (detected === 'unknown') {
-      if (activeMode === 'likes') toast('Panel looks like Reactions — proceeding as Likes.', 1200);
-      else { toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 1800); return; }
+      if (activeMode === 'likes') toast('Panel looks like Reactions — proceeding as Likes.', 1400);
+      else { toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 2000); return; }
     }
 
     const dlg = getDialog(sc);
@@ -612,28 +631,20 @@
     setUIBusy(false); stopHeartbeat();
 
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
-    if(hasAll){ toast('All three collected — downloading merged CSV…', 1200); downloadMerged(); }
+    if(hasAll){ toast('All three collected — downloading merged CSV…', 1400); downloadMerged(); }
     else { toast('Done for this mode ✓'); }
-  });
-
-  ui.querySelector('#fbp-dl').addEventListener('click', downloadMerged);
-  ui.querySelector('#fbp-reset').addEventListener('click', ()=>{
-    runToken++; // cancels any active run safely (even if paused)
-    stopHeartbeat(); setPaused(false);
-    resetForThisPost(); toast('Cleared for this post.');
-    setUIBusy(false, 'Ready');
   });
 
   // ===== Runners =====
   async function runLikes(token){
     const kind = detectPanelType(sc);
-    if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1600); return; }
+    if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
     const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
-    for(let i=0;i<300 && stable<STABLE_LIMIT;i++){
+    for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1400); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1400); break; }
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
 
       let grew=false, found=0;
       likeItems().forEach(it=>{
@@ -651,7 +662,7 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.9)); actionsThisRun++; }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.likes);
 
@@ -659,7 +670,7 @@
 
       const bodyTxt = document.body.innerText.toLowerCase();
       if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 1800);
+        toast('Temporary block text detected. Cooling down.', 2000);
         Throttle.backoff(true);
         break;
       }
@@ -669,14 +680,14 @@
 
   async function runComments(token){
     const dlg=getDialog(sc); const text=dialogText(dlg);
-    if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1600); return; }
-    if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1600); return; }
+    if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
+    if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
     const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
-    for(let i=0;i<340 && stable<STABLE_LIMIT;i++){
+    for(let i=0;i<320 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1400); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1400); break; }
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
 
       let grew=false, found=0;
       commentArticles().forEach(art=>{
@@ -690,7 +701,7 @@
 
       let clicked=0;
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
-        if(clicked>=3) return;
+        if(clicked>=2) return;
         const t=(b.innerText||'').toLowerCase();
         if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')){ b.click(); clicked++; actionsThisRun++; }
       });
@@ -702,7 +713,7 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.9)); actionsThisRun++; }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.comments);
 
@@ -710,23 +721,23 @@
 
       const bodyTxt = document.body.innerText.toLowerCase();
       if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 1800);
+        toast('Temporary block text detected. Cooling down.', 2000);
         Throttle.backoff(true);
         break;
       }
     }
-    if(!anyFound) toast('No comments found in this panel.', 1200);
+    if(!anyFound) toast('No comments found in this panel.', 1400);
     maybeRender(true);
   }
 
   async function runShares(token){
-    if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1600); return; }
+    if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
     const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
-    for(let i=0;i<300 && stable<STABLE_LIMIT;i++){
+    for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1400); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1400); break; }
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
 
       let grew=false, found=0;
       const as = sharerAnchors(sc);
@@ -744,7 +755,7 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.9)); actionsThisRun++; }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.shares);
 
@@ -752,12 +763,12 @@
 
       const bodyTxt = document.body.innerText.toLowerCase();
       if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 1800);
+        toast('Temporary block text detected. Cooling down.', 2000);
         Throttle.backoff(true);
         break;
       }
     }
-    if(!anyFound) toast('No shares found in this panel.', 1200);
+    if(!anyFound) toast('No shares found in this panel.', 1400);
     maybeRender(true);
   }
 
