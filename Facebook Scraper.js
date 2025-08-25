@@ -1,5 +1,8 @@
-// FB People Scraper — v17o_fix + sticky footer + mini controls on minimize
-(async function FB_Export_Persons_UNIFIED_v17o_sticky(){
+// FB People Scraper — v17o_sticky_min: sticky footer, min-height floor, narrow width, and "minimize = header + footer only"
+(async function FB_Export_Persons_UNIFIED_v17o_sticky_min(){
+  const MIN_PANEL_HEIGHT = 300; // <- smallest height before it auto-clamps (tweak if you like)
+  const DEFAULT_W = 400, MIN_W = 340;
+
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
@@ -74,7 +77,6 @@
       #fbp-postkey a{ color:#8ab4ff !important; text-decoration:none }
       #fbp-postkey a:hover{ text-decoration:underline }
 
-      /* Chips */
       .fbp-chip{
         display:inline-flex; align-items:center;
         padding:6px 10px; border-radius:999px;
@@ -106,23 +108,16 @@
       /* Preview */
       #fbp-prev{ border:1px solid #293042;border-radius:8px; }
 
-      /* Footer: stick to bottom of scrollable body (no overlap) */
+      /* Footer: sticky in normal mode; absolute at bottom when minimized */
       .fbp-bar{
         position:sticky; bottom:0; z-index:2;
         display:flex; align-items:center; gap:8px; margin-top:8px;
         background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px;
         box-shadow:0 8px 22px rgba(0,0,0,.35);
       }
+      .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:8px; z-index:4; }
       .fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
       .fbp-bar .grow{ flex:1 }
-
-      /* Compact bar shown in header when minimized */
-      .fbp-bar.mini{
-        position:static; margin:0 6px 0 auto; padding:0; border:none; background:transparent; box-shadow:none; gap:6px;
-      }
-      .fbp-bar.mini .grow{ display:none }
-      .fbp-bar.mini .iconbtn{ width:34px; height:28px }
-      .fbp-bar.mini #fbp-dl{ padding:0 8px }
     `;
     document.head.appendChild(style);
   })();
@@ -134,8 +129,8 @@
   const ui = Object.assign(document.createElement('div'), { id:'fbp-panel' });
   Object.assign(ui.style, {
     position:'fixed', right:'16px', top:'16px',
-    width:'460px', minWidth:'420px', maxWidth:'92vw',
-    height:'', maxHeight:'72vh',
+    width: DEFAULT_W+'px', minWidth: MIN_W+'px', maxWidth:'92vw',
+    minHeight: MIN_PANEL_HEIGHT+'px',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
     zIndex:2147483647, padding:'0 0 8px 0',
@@ -145,7 +140,10 @@
   // restore size if saved
   try{
     const sz = JSON.parse(localStorage.getItem('fbp_ui_size')||'null');
-    if(sz && sz.w && sz.h){ ui.style.width = sz.w+'px'; ui.style.height = sz.h+'px'; }
+    if(sz && sz.w && sz.h){
+      ui.style.width = Math.max(sz.w, MIN_W) + 'px';
+      ui.style.height = Math.max(sz.h, MIN_PANEL_HEIGHT) + 'px';
+    }
   }catch{}
 
   ui.innerHTML =
@@ -161,7 +159,7 @@
     '<div id="fbp-body">' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">1) Choose what to collect</div>' +
-        '<div id="fbp-modes"></div>' +
+        '<div id="fbp-modes" style="display:flex;gap:6px;flex-wrap:wrap"></div>' +
       '</div>' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">2) Select panel & start</div>' +
@@ -189,7 +187,7 @@
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>Preview (first 50)</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="height:80px;overflow:hidden"></div>' +
+        '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
         '<div id="fbp-bar" class="fbp-bar">' +
           '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause">⏸</button>' +
           '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
@@ -212,15 +210,14 @@
     let minimized = localStorage.getItem('fbp_ui_min') === '1';
     let lastSize = { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
 
-    function moveBarToMini(min){
+    function moveBar(min){
       if(min){
-        headEl.appendChild(barEl);
-        barEl.classList.add('mini');
-        const dl = ui.querySelector('#fbp-dl'); if(dl) dl.textContent = '⬇';
+        // move footer to panel root and pin to absolute bottom while body is hidden
+        ui.appendChild(barEl);
+        barEl.classList.add('float-bottom');
       }else{
         previewWrap.appendChild(barEl);
-        barEl.classList.remove('mini');
-        const dl = ui.querySelector('#fbp-dl'); if(dl) dl.textContent = '⬇ Download CSV';
+        barEl.classList.remove('float-bottom');
       }
     }
 
@@ -228,20 +225,27 @@
       minimized = min;
       localStorage.setItem('fbp_ui_min', min ? '1' : '0');
       if(min){
+        // save size then collapse to header+footer only
         if(ui.style.width || ui.style.height){ lastSize = { w: ui.offsetWidth, h: ui.offsetHeight }; }
         bodyEl.style.display = 'none';
-        ui.style.width = '420px';
-        ui.style.height = '';
         ui.style.resize = 'none';
+        // compute compact height = header + footer + padding
+        const headH = headEl.offsetHeight || 38;
+        const barH  = (ui.querySelector('#fbp-bar').offsetHeight || 46);
+        const compact = headH + barH + 16; // +padding
+        ui.style.height = compact + 'px';
+        // allow narrow minimized width too
+        ui.style.width = Math.max(MIN_W, Math.min(lastSize.w || DEFAULT_W, DEFAULT_W)) + 'px';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
-        moveBarToMini(true);
+        moveBar(true);
       }else{
         bodyEl.style.display = 'flex';
-        if(lastSize.w) ui.style.width = Math.max(lastSize.w, 420) + 'px';
-        if(lastSize.h) ui.style.height = lastSize.h+'px';
         ui.style.resize = 'both';
+        // restore previous size (clamped to floors)
+        if(lastSize.w) ui.style.width  = Math.max(lastSize.w, MIN_W) + 'px';
+        if(lastSize.h) ui.style.height = Math.max(lastSize.h, MIN_PANEL_HEIGHT) + 'px';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
-        moveBarToMini(false);
+        moveBar(false);
       }
     }
     minBtn.addEventListener('click', ()=>applyMin(!minimized));
@@ -250,8 +254,11 @@
     const ro = new ResizeObserver(entries=>{
       for(const e of entries){
         if(minimized) return;
-        const w = Math.round(e.contentRect.width);
-        const h = Math.round(e.contentRect.height);
+        const w = Math.max(Math.round(e.contentRect.width), MIN_W);
+        const h = Math.max(Math.round(e.contentRect.height), MIN_PANEL_HEIGHT);
+        // enforce min height/width while dragging
+        if(ui.offsetWidth < w)  ui.style.width  = w + 'px';
+        if(ui.offsetHeight < h) ui.style.height = h + 'px';
         localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
       }
     });
@@ -509,13 +516,9 @@
     if(rows.length === 0){
       prevBox.style.height = '80px';
       prevBox.style.overflowY = 'hidden';
-      prevBox.style.border = '1px solid #293042';
-      prevBox.style.borderRadius = '8px';
     }else{
       prevBox.style.height = 'clamp(120px,18vh,230px)';
       prevBox.style.overflowY = 'auto';
-      prevBox.style.border = '1px solid #293042';
-      prevBox.style.borderRadius = '8px';
     }
 
     let head =
@@ -810,7 +813,52 @@
     maybeRender(true);
   }
 
-  // initial preview
+  // ===== Toast helper
+  function toast(msg, ms=1600){
+    let wrap = document.getElementById('fbp-toastwrap');
+    if(!wrap){
+      wrap = Object.assign(document.createElement('div'), { id:'fbp-toastwrap' });
+      Object.assign(wrap.style, { position:'fixed', right:'18px', bottom:'18px', display:'flex', flexDirection:'column', gap:'8px', alignItems:'flex-end', zIndex:2147483647 });
+      document.body.appendChild(wrap);
+    }
+    const t=document.createElement('div');
+    Object.assign(t.style,{ background:'#1b5cff', color:'#fff', padding:'10px 12px', borderRadius:'10px', boxShadow:'0 8px 22px rgba(0,0,0,.35)', font:'12px system-ui,-apple-system, Segoe UI, Roboto', maxWidth:'280px' });
+    t.textContent=msg; wrap.appendChild(t);
+    while(wrap.children.length>4){ wrap.firstChild.remove(); }
+    setTimeout(()=>t.remove(), ms);
+  }
+
+  // ===== initial render
+  const prevBox=ui.querySelector('#fbp-prev');
+  const likeC=ui.querySelector('#fbp-likec');
+  const commentC=ui.querySelector('#fbp-commentc');
+  const shareC=ui.querySelector('#fbp-sharec');
+  function updateStats(){ likeC.textContent=counts.likes; commentC.textContent=counts.comments; shareC.textContent=counts.shares; }
+
   renderPreview();
 
+  // ===== clipboard + URL chip
+  let POST_URL=location.href, POST_KEY=(new URL(location.href)).toString();
+  function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
+  function setPostKeyLabel(){
+    const postKeyEl=ui.querySelector('#fbp-postkey');
+    POST_KEY=postKeyFromURL(POST_URL);
+    const short=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY);
+    postKeyEl.innerHTML='<a href="'+POST_KEY+'" target="_blank" title="'+POST_KEY+'">'+short+'</a>';
+  }
+  setPostKeyLabel();
+  (function(){
+    function refreshPostKey(){ POST_URL=location.href; setPostKeyLabel(); }
+    const _push=history.pushState, _replace=history.replaceState;
+    history.pushState=function(){ const r=_push.apply(this,arguments); refreshPostKey(); return r; };
+    history.replaceState=function(){ const r=_replace.apply(this,arguments); refreshPostKey(); return r; };
+    addEventListener('popstate', refreshPostKey);
+    let last=location.href; setInterval(()=>{ if(location.href!==last){ last=location.href; refreshPostKey(); } },1000);
+  })();
+  ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }
+    catch{ toast('Could not copy URL'); }
+  });
+
+  // (The rest of the run logic is identical to the previous working version and kept above.)
 })();
