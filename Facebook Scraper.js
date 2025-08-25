@@ -1,16 +1,17 @@
-// FB People Scraper — fixes: pause/idle state + no outer scrollbars (only preview when populated)
-(async function FB_Export_Persons_UNIFIED_v17m(){
+// FB People Scraper — faster run, FB-styled header, fixed window buttons, no outer scrollbars,
+// reliable minimize/restore, pause/stop correctness, preview-only scrolling, item-based progress.
+(async function FB_Export_Persons_UNIFIED_v17n(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  // ===== Tuning knobs =====
-  const PAUSE = { likes: 1900, comments: 2100, shares: 2300 };
-  const STABLE_LIMIT = 10;
-  const EMPTY_PASSES = 4;
+  // ===== Faster tuning (still polite) =====
+  const PAUSE = { likes: 1100, comments: 1300, shares: 1500 }; // ms between cycles
+  const STABLE_LIMIT = 8;
+  const EMPTY_PASSES = 3;
 
   // ===== Politeness controls =====
-  const LIMITS = { MAX_ACTIONS_PER_MIN: 28, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
-  function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
-  async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r,{timeout:1200})); } }
+  const LIMITS = { MAX_ACTIONS_PER_MIN: 45, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
+  function jitter(ms, ratio=0.20){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
+  async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r,{timeout:900})); } }
   const now = ()=>performance.now();
 
   let pausedByUser = false;
@@ -20,12 +21,13 @@
   const Throttle = (()=> {
     let pauseMult = 1;
     let tokens = LIMITS.MAX_ACTIONS_PER_MIN, maxTokens = LIMITS.MAX_ACTIONS_PER_MIN;
-    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 3000);
+    const refillEvery = Math.max(250, Math.round(60000 / maxTokens));
+    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, refillEvery);
     function spend(){ if(tokens<=0) return false; tokens--; return true; }
-    function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 2.0 : 1.20)); }
-    function ease(){ pauseMult = Math.max(1, pauseMult * 0.90); }
+    function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 1.6 : 1.15)); }
+    function ease(){ pauseMult = Math.max(1, pauseMult * 0.85); }
     async function politeWait(base){
-      while(pausedByUser || pausedByHidden){ await new Promise(r=>setTimeout(r, 400)); }
+      while(pausedByUser || pausedByHidden){ await new Promise(r=>setTimeout(r, 300)); }
       await new Promise(r=>setTimeout(r, jitter(base * pauseMult)));
       await yieldToBrowser();
     }
@@ -38,13 +40,13 @@
     const origFetch = window.fetch;
     window.fetch = async (...args)=>{
       const res = await origFetch(...args);
-      if(res && (res.status===429 || res.status===403)){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
+      if(res && (res.status===429 || res.status===403)){ throttleSignal=true; toast('Server throttle detected. Backing off.', 1800); Throttle.backoff(true); }
       return res;
     };
     const origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function(...a){
       this.addEventListener('load', function(){
-        if(this.status===429 || this.status===403){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
+        if(this.status===429 || this.status===403){ throttleSignal=true; toast('Server throttle detected. Backing off.', 1800); Throttle.backoff(true); }
       });
       return origSend.apply(this, a);
     };
@@ -94,7 +96,7 @@
       }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px 8px 6px } /* hide scrollbars in body */
+      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px 8px 6px }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
@@ -102,16 +104,15 @@
     document.head.appendChild(style);
   })();
 
-  // Remove old HUD if present
-  document.getElementById('fbp-hud')?.remove();
+  // Remove any old panel
   document.getElementById('fbp-panel')?.remove();
 
   // ===== UI panel =====
   const ui = Object.assign(document.createElement('div'), { id:'fbp-panel' });
   Object.assign(ui.style, {
     position:'fixed', right:'16px', top:'16px',
-    width:'440px', minWidth:'380px', maxWidth:'92vw',
-    height:'', maxHeight:'70vh',
+    width:'460px', minWidth:'400px', maxWidth:'92vw',
+    height:'', maxHeight:'72vh',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
     zIndex:2147483647, padding:'0 0 8px 0',
@@ -121,7 +122,7 @@
   // restore size if saved
   try{
     const sz = JSON.parse(localStorage.getItem('fbp_ui_size')||'null');
-    if(sz && sz.w && sz.h){ ui.style.width = sz.w+'px'; ui.style.height = sz.h+'px'; }
+    if(sz && sz.w && sz.h){ ui.style.width = Math.max(sz.w, 400)+'px'; ui.style.height = sz.h+'px'; }
   }catch{}
 
   ui.innerHTML =
@@ -165,10 +166,11 @@
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>Preview (first 50)</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev" style="height:76px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;position:sticky;bottom:0;background:#0f1115;padding-top:4px">' +
         '<button id="fbp-pause" class="fbp-btn warn">Pause</button>' +
+        '<button id="fbp-stop" class="fbp-btn warn">Stop</button>' +
         '<button id="fbp-dl" class="fbp-btn green" style="flex:1">Download Merged CSV</button>' +
         '<button id="fbp-reset" class="fbp-btn warn">Reset</button>' +
       '</div>' +
@@ -190,13 +192,13 @@
       if(min){
         if(ui.style.width || ui.style.height){ lastSize = { w: ui.offsetWidth, h: ui.offsetHeight }; }
         bodyEl.style.display = 'none';
-        ui.style.width = '380px';
+        ui.style.width = '400px';
         ui.style.height = '';
         ui.style.resize = 'none';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
       }else{
         bodyEl.style.display = 'flex';
-        if(lastSize.w) ui.style.width = Math.max(lastSize.w, 380) + 'px';
+        if(lastSize.w) ui.style.width = Math.max(lastSize.w, 400) + 'px';
         if(lastSize.h) ui.style.height = lastSize.h+'px';
         ui.style.resize = 'both';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
@@ -215,19 +217,6 @@
     });
     ro.observe(ui);
   })();
-
-  // ===== Sticky HUD =====
-  const hud = Object.assign(document.createElement('div'), { id:'fbp-hud' });
-  Object.assign(hud.style, {
-    position:'fixed', left:'12px', bottom:'12px', display:'flex', alignItems:'center', gap:'8px',
-    background:'#0f1115', color:'#e6e6e6', padding:'6px 10px', border:'1px solid #2a2f3a',
-    borderRadius:'999px', boxShadow:'0 8px 22px rgba(0,0,0,.35)', zIndex:2147483647
-  });
-  hud.innerHTML =
-    '<div id="fbp-led-mini" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
-    '<span id="fbp-hud-text" style="font-size:12px;opacity:.85">Idle</span>' +
-    '<button id="fbp-hud-toggle" class="fbp-btn round">Pause</button>';
-  document.body.appendChild(hud);
 
   // ===== Toasts =====
   let toastWrap = document.getElementById('fbp-toastwrap');
@@ -301,11 +290,6 @@
   const runtext = ui.querySelector('#fbp-runtext');
   const prog = ui.querySelector('#fbp-prog');
   const opsEl = ui.querySelector('#fbp-ops');
-
-  const ledMini = hud.querySelector('#fbp-led-mini');
-  const hudText = hud.querySelector('#fbp-hud-text');
-  const hudToggle = hud.querySelector('#fbp-hud-toggle');
-  const panelPauseBtn = ui.querySelector('#fbp-pause');
 
   let POST_URL=location.href;
   function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
@@ -471,7 +455,7 @@
     store.set(key, existing);
   }
 
-  let lastRender=0; function maybeRender(force=false){ const t=Date.now(); if(force || t-lastRender>900){ renderPreview(); lastRender=t; } else { updateStats(); } }
+  let lastRender=0; function maybeRender(force=false){ const t=Date.now(); if(force || t-lastRender>800){ renderPreview(); lastRender=t; } else { updateStats(); } }
 
   // ===== PREVIEW =====
   function renderPreview(){
@@ -479,7 +463,7 @@
 
     // Only let the preview scroll when there is data
     if(rows.length === 0){
-      prevBox.style.height = '80px';
+      prevBox.style.height = '76px';
       prevBox.style.overflowY = 'hidden';
     }else{
       prevBox.style.height = 'clamp(100px,18vh,220px)';
@@ -531,18 +515,18 @@
   let heartbeat=null, actionsThisRun=0, currentRunStarted=0;
   function setRunningState(state){
     const setLED = (el,color,anim)=>{ if(!el) return; el.style.background=color; el.style.animation=anim?'fbp-pulse 1.6s infinite':'none'; };
-    if(state==='running'){ setLED(led,'#24d05a',true); setLED(ledMini,'#24d05a',true); runtext.textContent='Running'; hudText.textContent='Running'; }
-    if(state==='paused'){ setLED(led,'#ffcc00',true); setLED(ledMini,'#ffcc00',true); runtext.textContent='Paused'; hudText.textContent='Paused'; }
-    if(state==='backoff'){ setLED(led,'#ff6a00',true); setLED(ledMini,'#ff6a00',true); runtext.textContent='Backoff'; hudText.textContent='Backoff'; }
-    if(state==='idle'){ setLED(led,'#666',false); setLED(ledMini,'#666',false); runtext.textContent='Idle'; hudText.textContent='Idle'; prog.style.width='0%'; opsEl.textContent='0/min'; }
+    if(state==='running'){ setLED(led,'#24d05a',true); runtext.textContent='Running'; }
+    if(state==='paused'){ setLED(led,'#ffcc00',true); runtext.textContent='Paused'; }
+    if(state==='backoff'){ setLED(led,'#ff6a00',true); runtext.textContent='Backoff'; }
+    if(state==='idle'){ setLED(led,'#666',false); runtext.textContent='Idle'; prog.style.width='0%'; opsEl.textContent='0/min'; }
   }
   function startHeartbeat(started){
     stopHeartbeat(); currentRunStarted = started; actionsThisRun = 0; setRunningState('running');
     heartbeat = setInterval(()=>{
       const elapsed = now() - currentRunStarted;
       const cur = (activeMode === 'likes'    ? counts.likes
-           : activeMode === 'comments' ? counts.comments
-           :                             counts.shares);
+                 : activeMode === 'comments' ? counts.comments
+                 :                             counts.shares);
       const pct = Math.min(100, Math.round((cur / LIMITS.SOFT_ROW_CAP) * 100));
       prog.style.width = pct + '%';
       const mins = Math.max(0.016, elapsed/60000);
@@ -555,22 +539,21 @@
   }
   function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunningState('idle'); }
 
-  // Fix: pause toggle must NOT claim "running" when no job active
+  // Pause/Stop correctness
   function setPaused(p){
     pausedByUser = !!p;
-    const running = !!heartbeat;
-    if(running){
-      panelPauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause';
-      hudToggle.textContent = panelPauseBtn.textContent;
+    if(heartbeat){ // only meaningful during a run
+      ui.querySelector('#fbp-pause').textContent = pausedByUser ? 'Resume' : 'Pause';
       setRunningState(pausedByUser ? 'paused' : 'running');
     }else{
-      panelPauseBtn.textContent = 'Pause';
-      hudToggle.textContent = 'Pause';
-      setRunningState('idle'); // no job -> never show "running"
+      ui.querySelector('#fbp-pause').textContent = 'Pause';
+      setRunningState('idle');
     }
   }
-  panelPauseBtn.addEventListener('click',()=>setPaused(!pausedByUser));
-  hudToggle.addEventListener('click',()=>setPaused(!pausedByUser));
+  ui.querySelector('#fbp-pause').addEventListener('click',()=>setPaused(!pausedByUser));
+  ui.querySelector('#fbp-stop').addEventListener('click', ()=>{
+    runToken++; stopHeartbeat(); setPaused(false); setUIBusy(false, 'Stopped'); toast('Stopped.');
+  });
 
   // ===== Run control =====
   let runToken=0;
@@ -583,10 +566,8 @@
   }
 
   ui.querySelector('#fbp-go').addEventListener('click', async function(){
-    // Ensure we aren't stuck in a pre-run paused state
-    setPaused(false);
-
-    toast('Click inside the open panel…', 1800);
+    setPaused(false); // ensure not pre-paused
+    toast('Click inside the open panel…', 1400);
 
     const ev = await new Promise(function(res){
       const h = function(e){ document.removeEventListener('click', h, true); res(e); };
@@ -602,10 +583,10 @@
     sc = c || document.scrollingElement || document.body;
 
     const detected = detectPanelType(sc);
-    if (detected !== 'unknown' && detected !== activeMode) { setActiveMode(detected); toast('Detected ' + detected + ' panel — switching mode.', 1400); }
+    if (detected !== 'unknown' && detected !== activeMode) { setActiveMode(detected); toast('Detected ' + detected + ' panel — switching mode.', 1200); }
     if (detected === 'unknown') {
-      if (activeMode === 'likes') toast('Panel looks like Reactions — proceeding as Likes.', 1400);
-      else { toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 2000); return; }
+      if (activeMode === 'likes') toast('Panel looks like Reactions — proceeding as Likes.', 1200);
+      else { toast('Could not recognize this panel for ' + activeMode + '. Open the correct dialog and try again.', 1800); return; }
     }
 
     const dlg = getDialog(sc);
@@ -624,23 +605,28 @@
     setUIBusy(false); stopHeartbeat();
 
     const hasAll = counts.likes>0 && counts.comments>0 && counts.shares>0;
-    if(hasAll){ toast('All three collected — downloading merged CSV…', 1400); downloadMerged(); }
+    if(hasAll){ toast('All three collected — downloading merged CSV…', 1200); downloadMerged(); }
     else { toast('Done for this mode ✓'); }
   });
 
   ui.querySelector('#fbp-dl').addEventListener('click', downloadMerged);
-  ui.querySelector('#fbp-reset').addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
+  ui.querySelector('#fbp-reset').addEventListener('click', ()=>{
+    runToken++; // cancels any active run safely (even if paused)
+    stopHeartbeat(); setPaused(false);
+    resetForThisPost(); toast('Cleared for this post.');
+    setUIBusy(false, 'Ready');
+  });
 
   // ===== Runners =====
   async function runLikes(token){
     const kind = detectPanelType(sc);
-    if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
+    if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1600); return; }
     const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
-    for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
+    for(let i=0;i<300 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1400); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1400); break; }
 
       let grew=false, found=0;
       likeItems().forEach(it=>{
@@ -658,7 +644,7 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.9)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.likes);
 
@@ -666,7 +652,7 @@
 
       const bodyTxt = document.body.innerText.toLowerCase();
       if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 2000);
+        toast('Temporary block text detected. Cooling down.', 1800);
         Throttle.backoff(true);
         break;
       }
@@ -676,14 +662,14 @@
 
   async function runComments(token){
     const dlg=getDialog(sc); const text=dialogText(dlg);
-    if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
-    if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
+    if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1600); return; }
+    if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1600); return; }
     const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
-    for(let i=0;i<320 && stable<STABLE_LIMIT;i++){
+    for(let i=0;i<340 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1400); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1400); break; }
 
       let grew=false, found=0;
       commentArticles().forEach(art=>{
@@ -697,7 +683,7 @@
 
       let clicked=0;
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
-        if(clicked>=2) return;
+        if(clicked>=3) return;
         const t=(b.innerText||'').toLowerCase();
         if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')){ b.click(); clicked++; actionsThisRun++; }
       });
@@ -709,7 +695,7 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.9)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.comments);
 
@@ -717,23 +703,23 @@
 
       const bodyTxt = document.body.innerText.toLowerCase();
       if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 2000);
+        toast('Temporary block text detected. Cooling down.', 1800);
         Throttle.backoff(true);
         break;
       }
     }
-    if(!anyFound) toast('No comments found in this panel.', 1400);
+    if(!anyFound) toast('No comments found in this panel.', 1200);
     maybeRender(true);
   }
 
   async function runShares(token){
-    if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
+    if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1600); return; }
     const started = now();
     let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
-    for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
+    for(let i=0;i<300 && stable<STABLE_LIMIT;i++){
       if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1400); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1400); break; }
 
       let grew=false, found=0;
       const as = sharerAnchors(sc);
@@ -751,7 +737,7 @@
 
       maybeRender(grew);
 
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.9)); actionsThisRun++; }
 
       await Throttle.politeWait(PAUSE.shares);
 
@@ -759,12 +745,12 @@
 
       const bodyTxt = document.body.innerText.toLowerCase();
       if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){
-        toast('Temporary block text detected. Cooling down.', 2000);
+        toast('Temporary block text detected. Cooling down.', 1800);
         Throttle.backoff(true);
         break;
       }
     }
-    if(!anyFound) toast('No shares found in this panel.', 1400);
+    if(!anyFound) toast('No shares found in this panel.', 1200);
     maybeRender(true);
   }
 
