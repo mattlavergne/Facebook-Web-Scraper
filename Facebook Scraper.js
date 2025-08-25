@@ -1,4 +1,4 @@
-(async function FB_Export_Persons_UNIFIED_v17h(){
+(async function FB_Export_Persons_UNIFIED_v17i(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs (slightly faster, still polite) =====
@@ -88,12 +88,13 @@
   const ui = Object.assign(document.createElement('div'), { id:'fbp-panel' });
   Object.assign(ui.style, {
     position:'fixed', right:'16px', top:'16px',
-    width:'360px', minWidth:'300px', maxWidth:'90vw',
-    height:'auto', maxHeight:'90vh',
+    width:'340px', minWidth:'300px', maxWidth:'90vw',
+    height:'auto', maxHeight:'80vh',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
     zIndex:2147483647, padding:'12px',
-    resize:'both', overflow:'hidden'
+    resize:'both', overflow:'hidden',
+    display:'flex', flexDirection:'column', minHeight:'44px'
   });
 
   // restore size if saved (normal state only)
@@ -103,7 +104,7 @@
   }catch{}
 
   ui.innerHTML =
-    '<div id="fbp-head" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:move">' +
+    '<div id="fbp-head" style="position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:move;background:#0f1115">' +
       '<div aria-label="Drag" title="Drag" style="width:16px;height:16px;flex:0 0 16px;display:grid;grid-template-columns:repeat(3,4px);grid-template-rows:repeat(3,4px);gap:2px;color:#9aa6b2;opacity:.7">' +
         '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
         '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
@@ -113,12 +114,11 @@
       '<div style="margin-left:auto;display:flex;align-items:center;gap:6px">' +
         '<button id="fbp-copyurl" title="Copy post URL" class="fbp-btn round">Copy URL</button>' +
         '<div id="fbp-postkey" style="opacity:.75;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title=""></div>' +
-        '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn round winbtn">–</button>' +
-        '<button id="fbp-max" aria-label="Maximize" title="Maximize" class="fbp-btn round winbtn">▢</button>' +
-        '<button id="fbp-close" aria-label="Close" title="Close" class="fbp-btn round winbtn close">×</button>' +
+        '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn round winbtn" style="width:28px;text-align:center">–</button>' +
+        '<button id="fbp-close" aria-label="Close" title="Close" class="fbp-btn round winbtn close" style="width:28px;text-align:center">×</button>' +
       '</div>' +
     '</div>' +
-    '<div id="fbp-body" style="display:flex;flex-direction:column;gap:8px;overflow:auto;height:calc(100% - 42px)">' +
+    '<div id="fbp-body" style="flex:1;display:flex;flex-direction:column;gap:8px;overflow:auto">' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">1) Choose what to collect</div>' +
         '<div id="fbp-modes" style="display:flex;gap:6px;flex-wrap:wrap"></div>' +
@@ -149,84 +149,63 @@
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>Preview (first 50)</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="height:clamp(120px,35vh,360px);overflow:auto;overflow-x:hidden;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev" style="height:clamp(120px,28vh,320px);overflow:auto;overflow-x:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
         '<button id="fbp-pause" class="fbp-btn warn">Pause</button>' +
         '<button id="fbp-dl" class="fbp-btn green" style="flex:1">Download Merged CSV</button>' +
         '<button id="fbp-reset" class="fbp-btn warn">Reset</button>' +
-        '<button id="fbp-exit" class="fbp-btn warn">Exit</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(ui);
 
-  // ===== Window controls =====
+  // Keep top bar always visible even when shrunk
+  const headEl = ui.querySelector('#fbp-head');
+  const headRO = new ResizeObserver(()=>{ ui.style.minHeight = headEl.offsetHeight + 'px'; });
+  headRO.observe(headEl);
+  ui.style.minHeight = headEl.offsetHeight + 'px';
+
+  // ===== Close button =====
   ui.querySelector('#fbp-close').addEventListener('click', ()=>ui.remove());
 
+  // ===== Minimize / persist (no keyboard shortcut) =====
   (function(){
     const bodyEl = ui.querySelector('#fbp-body');
     const minBtn = ui.querySelector('#fbp-min');
-    const maxBtn = ui.querySelector('#fbp-max');
 
-    let minimized = localStorage.getItem('fbp_ui_min') === '1';
-    let maximized = localStorage.getItem('fbp_ui_max') === '1';
     let lastSize = { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
 
     function applyMin(min){
-      minimized = min;
+      ui.dataset.min = min ? '1' : '0';
       localStorage.setItem('fbp_ui_min', min ? '1' : '0');
+
       if(min){
-        // save current size and force compact, disable resize
-        if(ui.style.width || ui.style.height){
-          lastSize = { w: ui.offsetWidth, h: ui.offsetHeight };
-        }
+        lastSize = { w: ui.offsetWidth, h: ui.offsetHeight };
         bodyEl.style.display = 'none';
-        ui.style.width = '280px';
-        ui.style.height = '';
+        ui.style.width = '300px';
+        ui.style.height = ''; // collapse to header only
         ui.style.resize = 'none';
-        minBtn.textContent = '▢'; minBtn.title = 'Restore';
+        minBtn.textContent = '+'; minBtn.title = 'Restore';
       }else{
         bodyEl.style.display = 'flex';
-        if(lastSize.w) ui.style.width = lastSize.w+'px';
-        if(lastSize.h) ui.style.height = lastSize.h+'px';
+        if(lastSize.w) ui.style.width = lastSize.w + 'px';
+        if(lastSize.h) ui.style.height = lastSize.h + 'px';
         ui.style.resize = 'both';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
       }
     }
 
-    function applyMax(max){
-      maximized = max;
-      localStorage.setItem('fbp_ui_max', max ? '1' : '0');
-      if(max){
-        if(ui.dataset.min==='1') applyMin(false);
-        lastSize = { w: ui.offsetWidth, h: ui.offsetHeight };
-        ui.style.top = '16px'; ui.style.right = '16px';
-        ui.style.width = Math.min(window.innerWidth*0.9, 900) + 'px';
-        ui.style.height = Math.min(window.innerHeight*0.9, 700) + 'px';
-        ui.style.resize = 'both';
-        maxBtn.textContent = '❐'; maxBtn.title = 'Restore down';
-      }else{
-        if(lastSize.w) ui.style.width = lastSize.w+'px';
-        if(lastSize.h) ui.style.height = lastSize.h+'px';
-        maxBtn.textContent = '▢'; maxBtn.title = 'Maximize';
-      }
-    }
+    // restore last state
+    applyMin(localStorage.getItem('fbp_ui_min') === '1');
 
+    // toggle on click
     minBtn.addEventListener('click', ()=>applyMin(!(ui.dataset.min==='1')));
-    maxBtn.addEventListener('click', ()=>applyMax(!maximized));
 
-    // Initial state
-    applyMin(minimized);
-    if(!minimized) applyMax(maximized);
-
-    // Persist size while not minimized
+    // persist size while not minimized
     const ro = new ResizeObserver(entries=>{
-      for(const e of entries){
-        if(ui.dataset.min==='1') return;
-        const w = Math.round(e.contentRect.width);
-        const h = Math.round(e.contentRect.height);
-        localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
-      }
+      if(ui.dataset.min==='1') return;
+      const r = entries[0].contentRect;
+      localStorage.setItem('fbp_ui_size', JSON.stringify({ w:Math.round(r.width), h:Math.round(r.height) }));
     });
     ro.observe(ui);
   })();
@@ -266,8 +245,8 @@
     if(pos.top!=null && pos.right!=null){ ui.style.top=pos.top+'px'; ui.style.right=pos.right+'px'; }
     let sx=0, sy=0, startTop=0, startRight=0, dragging=false;
     head.addEventListener('mousedown', e=>{
-      // prevent dragging when text selecting buttons
-      if((e.target.closest('.winbtn'))) return;
+      // prevent dragging when clicking control buttons
+      if(e.target.closest('#fbp-min') || e.target.closest('#fbp-close')) return;
       dragging=true; sx=e.clientX; sy=e.clientY;
       startTop=parseInt(getComputedStyle(ui).top,10);
       startRight=parseInt(getComputedStyle(ui).right,10);
@@ -622,7 +601,6 @@
 
   ui.querySelector('#fbp-dl').addEventListener('click', downloadMerged);
   ui.querySelector('#fbp-reset').addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
-  ui.querySelector('#fbp-exit').addEventListener('click', ()=>ui.remove());
 
   // ===== Runners =====
   async function runLikes(token){
