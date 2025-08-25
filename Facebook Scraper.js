@@ -540,7 +540,10 @@
     stopHeartbeat(); currentRunStarted = started; actionsThisRun = 0; setRunningState('running');
     heartbeat = setInterval(()=>{
       const elapsed = now() - currentRunStarted;
-      const pct = Math.max(0, Math.min(100, Math.round(elapsed / LIMITS.MAX_RUN_MS * 100)));
+      const cur = (activeMode === 'likes'    ? counts.likes
+           : activeMode === 'comments' ? counts.comments
+           :                             counts.shares);
+      const pct = Math.min(100, Math.round((cur / LIMITS.SOFT_ROW_CAP) * 100));
       prog.style.width = pct + '%';
       const mins = Math.max(0.016, elapsed/60000);
       const apm = Math.round(actionsThisRun / mins);
