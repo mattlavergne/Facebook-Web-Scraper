@@ -1,5 +1,5 @@
-// FB People Scraper — FB-themed sticky top bar (non-overlapping), fixed-size window buttons, shorter preview
-(async function FB_Export_Persons_UNIFIED_v17k(){
+// FB People Scraper — fixes: pause/idle state + no outer scrollbars (only preview when populated)
+(async function FB_Export_Persons_UNIFIED_v17m(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
@@ -56,14 +56,14 @@
     style.textContent = `
       @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
       #fbp-panel, #fbp-panel * { box-sizing:border-box }
-      #fbp-panel { display:flex; flex-direction:column }
+      #fbp-panel { display:flex; flex-direction:column; overflow:hidden } /* no scrollbars on the panel */
       #fbp-panel button { transition: transform .06s ease, background-color .12s ease, border-color .12s ease, opacity .12s ease; }
       #fbp-panel button:active { transform: translateY(1px) scale(.99); }
 
       /* FB dark header styling — sticky, draggable from the whole bar */
       #fbp-head{
         position:sticky; top:0; z-index:2;
-        background:#1d2129; /* FB dark header tone */
+        background:#1d2129;
         height:38px; display:flex; align-items:center; gap:8px;
         padding:0 8px 6px 10px; cursor:grab;
         border-bottom:1px solid #2a2f3a;
@@ -74,7 +74,9 @@
       #fbp-postkey a{ color:#8ab4ff; text-decoration:none }
       #fbp-postkey a:hover{ text-decoration:underline }
 
-      /* Buttons share the same base style */
+      .fbp-chip { padding:6px 10px;border-radius:999px;border:1px solid #384155;background:#171a20;color:#e6e6e6;cursor:pointer }
+      .fbp-chip.active { border-color:#3b7cff;background:#1a2337; box-shadow:inset 0 0 0 1px #2b3960; }
+
       .fbp-btn{ border:1px solid #2a2f3a; background:#141823; color:#dfe3ee; border-radius:8px; padding:8px; cursor:pointer }
       .fbp-btn.primary{ border-color:#3b7cff; background:#2353ff; color:#fff; font-weight:600 }
       .fbp-btn.warn{ border-color:#444; background:#181b22 }
@@ -92,7 +94,7 @@
       }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:140px; padding:6px 6px 8px 6px }
+      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px 8px 6px } /* hide scrollbars in body */
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
@@ -102,9 +104,9 @@
 
   // Remove old HUD if present
   document.getElementById('fbp-hud')?.remove();
+  document.getElementById('fbp-panel')?.remove();
 
   // ===== UI panel =====
-  document.getElementById('fbp-panel')?.remove();
   const ui = Object.assign(document.createElement('div'), { id:'fbp-panel' });
   Object.assign(ui.style, {
     position:'fixed', right:'16px', top:'16px',
@@ -163,7 +165,7 @@
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>Preview (first 50)</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="height:clamp(60px,16vh,160px);overflow:auto;overflow-x:hidden;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;position:sticky;bottom:0;background:#0f1115;padding-top:4px">' +
         '<button id="fbp-pause" class="fbp-btn warn">Pause</button>' +
@@ -188,7 +190,7 @@
       if(min){
         if(ui.style.width || ui.style.height){ lastSize = { w: ui.offsetWidth, h: ui.offsetHeight }; }
         bodyEl.style.display = 'none';
-        ui.style.width = '380px'; // match minWidth to keep header controls visible
+        ui.style.width = '380px';
         ui.style.height = '';
         ui.style.resize = 'none';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
@@ -474,6 +476,16 @@
   // ===== PREVIEW =====
   function renderPreview(){
     const rows = Array.from(store.values());
+
+    // Only let the preview scroll when there is data
+    if(rows.length === 0){
+      prevBox.style.height = '80px';
+      prevBox.style.overflowY = 'hidden';
+    }else{
+      prevBox.style.height = 'clamp(100px,18vh,220px)';
+      prevBox.style.overflowY = 'auto';
+    }
+
     let head =
       '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
         '<colgroup>' +
@@ -540,11 +552,19 @@
   }
   function stopHeartbeat(){ if(heartbeat){ clearInterval(heartbeat); heartbeat=null; } setRunningState('idle'); }
 
+  // Fix: pause toggle must NOT claim "running" when no job active
   function setPaused(p){
     pausedByUser = !!p;
-    panelPauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause';
-    hudToggle.textContent = pausedByUser ? 'Resume' : 'Pause';
-    setRunningState(pausedByUser ? 'paused' : 'running');
+    const running = !!heartbeat;
+    if(running){
+      panelPauseBtn.textContent = pausedByUser ? 'Resume' : 'Pause';
+      hudToggle.textContent = panelPauseBtn.textContent;
+      setRunningState(pausedByUser ? 'paused' : 'running');
+    }else{
+      panelPauseBtn.textContent = 'Pause';
+      hudToggle.textContent = 'Pause';
+      setRunningState('idle'); // no job -> never show "running"
+    }
   }
   panelPauseBtn.addEventListener('click',()=>setPaused(!pausedByUser));
   hudToggle.addEventListener('click',()=>setPaused(!pausedByUser));
@@ -560,6 +580,9 @@
   }
 
   ui.querySelector('#fbp-go').addEventListener('click', async function(){
+    // Ensure we aren't stuck in a pre-run paused state
+    setPaused(false);
+
     toast('Click inside the open panel…', 1800);
 
     const ev = await new Promise(function(res){
