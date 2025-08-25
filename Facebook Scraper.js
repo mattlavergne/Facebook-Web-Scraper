@@ -55,6 +55,7 @@
     style.textContent = `
       @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
       @keyframes fbp-breath { 0%,100% { transform:scale(1) } 50% { transform:scale(1.06) } }
+      #fbp-panel, #fbp-panel * { box-sizing:border-box }
       #fbp-panel button { transition: transform .06s ease, background-color .12s ease, border-color .12s ease, opacity .12s ease; }
       #fbp-panel button:active { transform: translateY(1px) scale(.99); }
       #fbp-panel .fbp-chip { padding:6px 10px;border-radius:999px;border:1px solid #384155;background:#171a20;color:#e6e6e6;cursor:pointer }
@@ -63,9 +64,10 @@
       #fbp-panel .fbp-btn.primary { border-color:#3b7cff;background:#2353ff;color:#fff;font-weight:600 }
       #fbp-panel .fbp-btn.warn { border-color:#444;background:#181b22 }
       #fbp-panel .fbp-btn.green { border-color:#2c8a3f;background:#1d7a31;color:#fff;font-weight:600 }
-      #fbp-panel .fbp-btn.round { border-radius:999px;padding:4px 8px }
+      #fbp-panel .fbp-btn.round { border-radius:999px;padding:4px 8px; min-width:28px; text-align:center }
       #fbp-panel .fbp-btn:hover { filter:brightness(1.06) }
       #fbp-panel .fbp-btn:disabled { opacity:.65; cursor:not-allowed }
+      #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-panel .fbp-kbd { font:11px/1.2 system-ui; padding:2px 6px; border:1px solid #2a2f3a; border-bottom-color:#1c2130; background:#141823; border-radius:6px; opacity:.8 }
       #fbp-panel[data-min="1"] { backdrop-filter: blur(6px); }
@@ -87,11 +89,20 @@
 
   const ui = Object.assign(document.createElement('div'), { id:'fbp-panel' });
   Object.assign(ui.style, {
-    position:'fixed', right:'16px', top:'16px', width:'360px', maxWidth:'360px',
+    position:'fixed', right:'16px', top:'16px',
+    width:'360px', maxWidth:'70vw', minWidth:'280px',
+    height:'auto', maxHeight:'80vh', minHeight:'260px',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
-    zIndex:2147483647, padding:'12px'
+    zIndex:2147483647, padding:'12px',
+    resize:'both', overflow:'hidden'
   });
+
+  // restore size if saved
+  try{
+    const sz = JSON.parse(localStorage.getItem('fbp_ui_size')||'null');
+    if(sz && sz.w && sz.h){ ui.style.width = sz.w+'px'; ui.style.height = sz.h+'px'; }
+  }catch{}
 
   ui.innerHTML =
     '<div id="fbp-head" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:move">' +
@@ -99,16 +110,16 @@
         '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
         '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
         '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
-        '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn round" style="width:28px;text-align:center">–</button>' +
       '</div>' +
       '<div style="font-weight:700">FB People Scraper</div>' +
       '<div style="margin-left:auto;display:flex;align-items:center;gap:6px">' +
         '<button id="fbp-copyurl" title="Copy post URL" class="fbp-btn round">Copy URL</button>' +
-        '<div id="fbp-postkey" style="opacity:.75;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title=""></div>' +
-        '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn round" style="width:28px;text-align:center">–</button>' +
+        '<div id="fbp-postkey" style="opacity:.75;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title=""></div>' +
+        '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn round">_</button>' +
+        '<button id="fbp-close" aria-label="Close" title="Close" class="fbp-btn round">×</button>' +
       '</div>' +
     '</div>' +
-    '<div id="fbp-body" style="display:grid;gap:8px">' +
+    '<div id="fbp-body" style="display:flex;flex-direction:column;gap:8px;overflow:auto;height:calc(100% - 42px)">' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>1) Choose what to collect</span>' +
@@ -127,14 +138,14 @@
           '<div id="fbp-ops" style="font-size:11px;opacity:.75;width:68px;text-align:right">0/min</div>' +
         '</div>' +
       '</div>' +
-      '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between">' +
-        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
+      '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap">' +
+        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:110px">' +
           '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">👍<span>Likes</span></div><div id="fbp-likec" style="font-weight:700">0</div>' +
         '</div>' +
-        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
+        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:110px">' +
           '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">↗<span>Shares</span></div><div id="fbp-sharec" style="font-weight:700">0</div>' +
         '</div>' +
-        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center">' +
+        '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:110px">' +
           '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">💬<span>Comments</span></div><div id="fbp-commentc" style="font-weight:700">0</div>' +
         '</div>' +
       '</div>' +
@@ -143,7 +154,7 @@
           '<span>Preview (first 50)</span>' +
           '<span style="opacity:.7">Tip: <span class="fbp-kbd">Esc</span> closes dialogs</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="max-height:240px;overflow:auto;overflow-x:hidden;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev" style="height:clamp(120px,35vh,360px);overflow:auto;overflow-x:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
         '<button id="fbp-pause" class="fbp-btn warn">Pause</button>' +
@@ -154,30 +165,54 @@
     '</div>';
   document.body.appendChild(ui);
 
-  // ===== Minimize / persist (drop-in) =====
+  // ===== window controls =====
+  ui.querySelector('#fbp-close').addEventListener('click', ()=>ui.remove());
+
+  // ===== Minimize / persist =====
   (function(){
     const bodyEl = ui.querySelector('#fbp-body');
     const minBtn = ui.querySelector('#fbp-min');
-  
+    let lastSize = {
+      w: parseInt(getComputedStyle(ui).width,10),
+      h: parseInt(getComputedStyle(ui).height,10)
+    };
+
     function applyMinimized(min){
       ui.dataset.min = min ? '1' : '0';
-      bodyEl.style.display = min ? 'none' : 'grid';
-      minBtn.textContent = min ? '+' : '–';
-      minBtn.title = min ? 'Expand' : 'Minimize';
+      bodyEl.style.display = min ? 'none' : 'flex';
+      minBtn.textContent = min ? '▢' : '_'; // restore / minimize glyphs
+      minBtn.title = min ? 'Restore' : 'Minimize';
       localStorage.setItem('fbp_ui_min', min ? '1' : '0');
-      ui.style.padding = min ? '8px' : '12px';
-      ui.style.width = min ? '260px' : '360px';
-      ui.style.maxWidth = ui.style.width;
+      if(min){
+        lastSize = { w: ui.offsetWidth, h: ui.offsetHeight };
+        ui.style.height = '';
+        ui.style.width = '280px';
+      }else{
+        if(lastSize.w) ui.style.width = lastSize.w+'px';
+        if(lastSize.h) ui.style.height = lastSize.h+'px';
+      }
     }
-  
+
     const savedMin = localStorage.getItem('fbp_ui_min') === '1';
     applyMinimized(savedMin);
-  
+
     minBtn.addEventListener('click', ()=>applyMinimized(!(ui.dataset.min==='1')));
     ui.querySelector('#fbp-head').addEventListener('dblclick', ()=>minBtn.click());
+
+    // persist size on resize
+    const ro = new ResizeObserver(entries=>{
+      for(const e of entries){
+        if(ui.dataset.min==='1') return;
+        const w = Math.round(e.contentRect.width);
+        const h = Math.round(e.contentRect.height);
+        localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
+      }
+    });
+    ro.observe(ui);
+
+    // keyboard
     ui.addEventListener('keydown', e=>{ if((e.key||'').toLowerCase()==='m') minBtn.click(); });
   })();
-
 
   // ===== Sticky HUD (always visible) =====
   const hud = Object.assign(document.createElement('div'), { id:'fbp-hud' });
