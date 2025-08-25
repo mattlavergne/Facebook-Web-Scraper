@@ -1,5 +1,5 @@
-// FB People Scraper — preview-footer buttons, non-overlapping; pause/play icon; minimized keeps footer visible
-(async function FB_Export_Persons_UNIFIED_v17n(){
+// FB People Scraper — footer aligns under preview (no overlap), sticky when space is tight; pause/play icon
+(async function FB_Export_Persons_UNIFIED_v17o(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
@@ -90,19 +90,23 @@
       #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; line-height:1; font-size:16px; font-weight:700; border-radius:8px; }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px calc(var(--fbp-bar-h) + 8px) 6px; } /* reserve space for footer */
+      /* Body reserves space so footer never overlaps */
+      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px 8px 6px; }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
 
-      /* Footer bar pinned to panel bottom; never overlaps content because of body padding-bottom */
+      /* Footer bar absolutely positioned; JS will pin it flush under preview or to panel bottom if tight */
       #fbp-bar{
-        position:absolute; left:8px; right:8px; bottom:8px; height:var(--fbp-bar-h);
-        display:flex; align-items:center; gap:8px; z-index:2;
+        position:absolute; left:8px; right:8px; height:var(--fbp-bar-h);
+        display:flex; align-items:center; gap:8px; z-index:4;
         background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px; box-shadow:0 8px 22px rgba(0,0,0,.35);
       }
       #fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
       #fbp-bar .grow{ flex:1 }
+
+      /* Give the preview section a bottom margin equal to the bar height so visuals never overlap */
+      #fbp-preview-wrap{ margin-bottom: calc(var(--fbp-bar-h) + 10px); }
     `;
     document.head.appendChild(style);
   })();
@@ -130,9 +134,9 @@
 
   ui.innerHTML =
     '<div id="fbp-head">' +
-    '<div id="fbp-title">FB People Scraper</div>' +
+      '<div id="fbp-title">FB People Scraper</div>' +
       '<button id="fbp-copyurl" aria-label="Copy URL" title="Copy URL" class="fbp-btn round" style="height:28px;width:36px;padding:0;flex:0 0 36px">⧉</button>' +
-    '<div id="fbp-postkey" title=""></div>' +
+      '<div id="fbp-postkey" title=""></div>' +
       '<div id="fbp-win">' +
         '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn winbtn">–</button>' +
         '<button id="fbp-close" aria-label="Close" title="Close" class="fbp-btn winbtn close">×</button>' +
@@ -165,14 +169,14 @@
           '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">💬<span>Comments</span></div><div id="fbp-commentc" style="font-weight:700">0</div>' +
         '</div>' +
       '</div>' +
-      '<div>' +
+      '<div id="fbp-preview-wrap">' +
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>Preview (first 50)</span>' +
         '</div>' +
         '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
     '</div>' +
-    '<div id="fbp-bar">' +
+    '<div id="fbp-bar" style="bottom:8px">' +   /* JS may switch to top positioning */
       '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause">⏸</button>' +
       '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
       '<button id="fbp-dl" class="fbp-btn green grow" title="Download CSV">⬇ Download CSV</button>' +
@@ -206,18 +210,12 @@
         ui.style.resize = 'both';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
       }
+      positionBar(); // keep footer placed correctly
     }
     minBtn.addEventListener('click', ()=>applyMin(!minimized));
     applyMin(minimized);
 
-    const ro = new ResizeObserver(entries=>{
-      for(const e of entries){
-        if(minimized) return;
-        const w = Math.round(e.contentRect.width);
-        const h = Math.round(e.contentRect.height);
-        localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
-      }
-    });
+    const ro = new ResizeObserver(()=>positionBar());
     ro.observe(ui);
   })();
 
@@ -469,7 +467,6 @@
   function renderPreview(){
     const rows = Array.from(store.values());
 
-    // Only let the preview scroll when there is data (max ~5–6 rows)
     if(rows.length === 0){
       prevBox.style.height = '80px';
       prevBox.style.overflowY = 'hidden';
@@ -504,6 +501,7 @@
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
     updateStats();
+    positionBar(); // re-place footer after size changes
   }
 
   function escapeHTML(s){ return (s||'').replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
@@ -518,6 +516,21 @@
     const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'facebook_engagements_export_from_fb.csv' });
     document.body.appendChild(link); link.click(); link.remove();
   }
+
+  // ===== Position footer so it hugs preview bottom (or panel bottom if there isn't room) =====
+  function positionBar(){
+    const bar = ui.querySelector('#fbp-bar');
+    if(!bar) return;
+    const panelRect = ui.getBoundingClientRect();
+    const prevRect = prevBox.getBoundingClientRect();
+    const barH = bar.offsetHeight || 46;
+    const desiredTop = (prevRect.bottom + 8) - panelRect.top; // 8px gap under preview
+    const maxTop = ui.offsetHeight - barH - 8;                // 8px panel padding
+    const top = Math.min(Math.max(8, desiredTop), maxTop);    // clamp inside panel
+    bar.style.top = top + 'px';
+    bar.style.bottom = '';
+  }
+  window.addEventListener('resize', positionBar);
 
   // ===== Live run indicator =====
   let heartbeat=null, actionsThisRun=0, currentRunStarted=0;
@@ -553,7 +566,6 @@
     const running = !!heartbeat;
     btnPause.disabled = !running;
     btnStop.disabled  = !running;
-    // icon toggle
     btnPause.textContent = (running && pausedByUser) ? '▶' : '⏸';
     btnPause.title = (running && pausedByUser) ? 'Resume' : 'Pause';
   }
@@ -564,14 +576,13 @@
     if(running){
       setRunningState(pausedByUser ? 'paused' : 'running');
     }else{
-      setRunningState('idle'); // never show running if no job
+      setRunningState('idle');
     }
     refreshControls();
   }
 
   btnPause.addEventListener('click',()=>setPaused(!pausedByUser));
   btnStop.addEventListener('click', ()=>{
-    // Stop current run without clearing data
     runToken++; // invalidate
     stopHeartbeat();
     setPaused(false);
@@ -772,7 +783,8 @@
     maybeRender(true);
   }
 
-  // initial preview
+  // initial preview + initial footer placement
   renderPreview();
+  positionBar();
 
 })();
