@@ -189,7 +189,7 @@
   try{
     const headH = ui.querySelector('#fbp-head')?.offsetHeight || 38;
     const barH  = ui.querySelector('#fbp-bar')?.offsetHeight || 46;
-    MIN_PANEL_HEIGHT = headH + barH + 20;
+    MIN_PANEL_HEIGHT = Math.max(MIN_PANEL_HEIGHT, headH + barH + 20);
     ui.style.minHeight = MIN_PANEL_HEIGHT + 'px';
   }catch{}
 
@@ -267,16 +267,14 @@
     applyMin(minimized);
 
     // Persist size and enforce floors
-    const ro = new ResizeObserver(entries=>{
-      for(const e of entries){
-        if(minimized) return;
-        const w = Math.max(Math.round(e.contentRect.width), MIN_W);
-        const h = Math.max(Math.round(e.contentRect.height), MIN_PANEL_HEIGHT);
-        ui.style.width  = w + 'px';
-        ui.style.height = h + 'px';
-        localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
-        lastSize = { w, h };
-      }
+    const ro = new ResizeObserver(()=>{
+      if(minimized) return;
+      let w = Math.max(parseInt(getComputedStyle(ui).width,10), MIN_W);
+      let h = Math.max(parseInt(getComputedStyle(ui).height,10), MIN_PANEL_HEIGHT);
+      ui.style.width  = w + 'px';
+      ui.style.height = h + 'px';
+      localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
+      lastSize = { w, h };
     });
     ro.observe(ui);
   })();
