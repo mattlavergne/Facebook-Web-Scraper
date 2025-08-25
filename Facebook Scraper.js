@@ -49,12 +49,31 @@
     };
   })();
 
-  // ===== Keyframes =====
+  // ===== Styles / keyframes =====
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
       @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
       @keyframes fbp-breath { 0%,100% { transform:scale(1) } 50% { transform:scale(1.06) } }
+      #fbp-panel button { transition: transform .06s ease, background-color .12s ease, border-color .12s ease, opacity .12s ease; }
+      #fbp-panel button:active { transform: translateY(1px) scale(.99); }
+      #fbp-panel .fbp-chip { padding:6px 10px;border-radius:999px;border:1px solid #384155;background:#171a20;color:#e6e6e6;cursor:pointer }
+      #fbp-panel .fbp-chip.active { border-color:#3b7cff;background:#1a2337; box-shadow:inset 0 0 0 1px #2b3960; }
+      #fbp-panel .fbp-btn { border:1px solid #2a2f3a;background:#141823;color:#dfe3ee;border-radius:8px;padding:8px;cursor:pointer }
+      #fbp-panel .fbp-btn.primary { border-color:#3b7cff;background:#2353ff;color:#fff;font-weight:600 }
+      #fbp-panel .fbp-btn.warn { border-color:#444;background:#181b22 }
+      #fbp-panel .fbp-btn.green { border-color:#2c8a3f;background:#1d7a31;color:#fff;font-weight:600 }
+      #fbp-panel .fbp-btn.round { border-radius:999px;padding:4px 8px }
+      #fbp-panel .fbp-btn:hover { filter:brightness(1.06) }
+      #fbp-panel .fbp-btn:disabled { opacity:.65; cursor:not-allowed }
+      #fbp-panel table tr:hover td { background:#121722 }
+      #fbp-panel .fbp-kbd { font:11px/1.2 system-ui; padding:2px 6px; border:1px solid #2a2f3a; border-bottom-color:#1c2130; background:#141823; border-radius:6px; opacity:.8 }
+      #fbp-panel[data-min="1"] { backdrop-filter: blur(6px); }
+      #fbp-panel[data-min="1"] #fbp-head { margin-bottom:0; }
+      #fbp-hud .fbp-badge { font-size:11px; opacity:.85; padding:2px 6px; border:1px solid #2a2f3a; border-radius:999px; }
+      #fbp-prog { transition: width .2s ease }
+      #fbp-postkey a { color:#8ab4ff; text-decoration:none }
+      #fbp-postkey a:hover { text-decoration:underline }
     `;
     document.head.appendChild(style);
   })();
@@ -83,20 +102,23 @@
       '</div>' +
       '<div style="font-weight:700">FB People Scraper</div>' +
       '<div style="margin-left:auto;display:flex;align-items:center;gap:6px">' +
-        '<button id="fbp-copyurl" title="Copy post URL" style="border:1px solid #2a2f3a;background:#141823;color:#dfe3ee;border-radius:6px;padding:4px 6px;cursor:pointer">Copy URL</button>' +
+        '<button id="fbp-copyurl" title="Copy post URL" class="fbp-btn round">Copy URL</button>' +
         '<div id="fbp-postkey" style="opacity:.75;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title=""></div>' +
+        '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn round" style="width:28px;text-align:center">–</button>' +
       '</div>' +
     '</div>' +
-    '<div style="display:grid;gap:8px">' +
+    '<div id="fbp-body" style="display:grid;gap:8px">' +
       '<div>' +
-        '<div style="font-size:11px;opacity:.8;margin-bottom:6px">1) Choose what to collect</div>' +
+        '<div style="font-size:11px;opacity:.8;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">' +
+          '<span>1) Choose what to collect</span>' +
+          '<span class="fbp-kbd" title="Quick toggle">Press M to minimize</span>' +
+        '</div>' +
         '<div id="fbp-modes" style="display:flex;gap:6px;flex-wrap:wrap"></div>' +
       '</div>' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">2) Select panel & start</div>' +
-        '<button id="fbp-go" style="width:100%;padding:10px;border:1px solid #3b7cff;background:#2353ff;color:white;border-radius:8px;cursor:pointer;font-weight:600">Select Panel & Start</button>' +
+        '<button id="fbp-go" class="fbp-btn primary" style="width:100%;padding:10px">Select Panel & Start</button>' +
         '<div id="fbp-status" style="font-size:11px;opacity:.75;margin-top:6px">Ready</div>' +
-        // Inline run bar
         '<div id="fbp-runind" style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
           '<div id="fbp-led" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
           '<div id="fbp-runtext" style="font-size:11px;opacity:.8;min-width:56px">Idle</div>' +
@@ -116,17 +138,39 @@
         '</div>' +
       '</div>' +
       '<div>' +
-        '<div style="font-size:11px;opacity:.8;margin:8px 0 6px">Preview (first 50)</div>' +
+        '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
+          '<span>Preview (first 50)</span>' +
+          '<span style="opacity:.7">Tip: <span class="fbp-kbd">Esc</span> closes dialogs</span>' +
+        '</div>' +
         '<div id="fbp-prev" style="max-height:240px;overflow:auto;overflow-x:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-        '<button id="fbp-pause" style="padding:8px;border:1px solid #555;background:#1b1f2a;color:#e6e6e6;border-radius:8px;cursor:pointer">Pause</button>' +
-        '<button id="fbp-dl" style="flex:1;padding:8px;border:1px solid #2c8a3f;background:#1d7a31;color:#fff;border-radius:8px;cursor:pointer;font-weight:600">Download Merged CSV</button>' +
-        '<button id="fbp-reset" style="padding:8px;border:1px solid #444;background:#181b22;color:#e6e6e6;border-radius:8px;cursor:pointer">Reset</button>' +
-        '<button id="fbp-exit" style="padding:8px;border:1px solid #444;background:#181b22;color:#e6e6e6;border-radius:8px;cursor:pointer">Exit</button>' +
+        '<button id="fbp-pause" class="fbp-btn warn">Pause</button>' +
+        '<button id="fbp-dl" class="fbp-btn green" style="flex:1">Download Merged CSV</button>' +
+        '<button id="fbp-reset" class="fbp-btn warn">Reset</button>' +
+        '<button id="fbp-exit" class="fbp-btn warn">Exit</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(ui);
+
+  // ===== Minimize / persist =====
+  const bodyEl = ui.querySelector('#fbp-body');
+  const minBtn = ui.querySelector('#fbp-min');
+  function applyMinimized(min){
+    ui.dataset.min = min ? '1' : '0';
+    bodyEl.style.display = min ? 'none' : 'grid';
+    minBtn.textContent = min ? '+' : '–';
+    minBtn.title = min ? 'Expand' : 'Minimize';
+    localStorage.setItem('fbp_ui_min', min ? '1' : '0');
+    ui.style.padding = min ? '8px' : '12px';
+    ui.style.width = min ? '260px' : '360px';
+    ui.style.maxWidth = ui.style.width;
+  }
+  const savedMin = localStorage.getItem('fbp_ui_min') === '1';
+  applyMinimized(savedMin);
+  minBtn.addEventListener('click', ()=>applyMinimized(!(ui.dataset.min==='1')));
+  ui.querySelector('#fbp-head').addEventListener('dblclick', ()=>minBtn.click());
+  ui.addEventListener('keydown', e=>{ if(e.key.toLowerCase()==='m') minBtn.click(); });
 
   // ===== Sticky HUD (always visible) =====
   const hud = Object.assign(document.createElement('div'), { id:'fbp-hud' });
@@ -137,8 +181,8 @@
   });
   hud.innerHTML =
     '<div id="fbp-led-mini" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
-    '<span id="fbp-hud-text" style="font-size:12px;opacity:.85">Idle</span>' +
-    '<button id="fbp-hud-toggle" style="padding:4px 8px;border:1px solid #555;background:#1b1f2a;color:#e6e6e6;border-radius:999px;cursor:pointer">Pause</button>';
+    '<span id="fbp-hud-text" class="fbp-badge">Idle</span>' +
+    '<button id="fbp-hud-toggle" class="fbp-btn round">Pause</button>';
   document.body.appendChild(hud);
 
   // ===== Toast stack =====
@@ -157,7 +201,7 @@
   }
 
   // ===== draggable (persist) =====
-  (function(){
+  ;(function(){
     const head = ui.querySelector('#fbp-head');
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
     if(pos.top!=null && pos.right!=null){ ui.style.top=pos.top+'px'; ui.style.right=pos.right+'px'; }
@@ -187,8 +231,17 @@
   // ===== modes =====
   const modes=[{key:'likes',label:'Likes'},{key:'shares',label:'Shares'},{key:'comments',label:'Comments'}];
   const modeWrap=ui.querySelector('#fbp-modes'); let activeMode='likes'; const modeButtons={};
-  function setActiveMode(k){ activeMode=k; Object.values(modeButtons).forEach(el=>el.style.outline=''); if(modeButtons[k]) modeButtons[k].style.outline='2px solid #3b7cff'; }
-  modes.forEach(m=>{ const b=document.createElement('button'); Object.assign(b.style,{padding:'6px 10px',borderRadius:'8px',border:'1px solid #384155',background:'#171a20',color:'#e6e6e6',cursor:'pointer'}); b.textContent=m.label; b.dataset.mode=m.key; b.addEventListener('click',()=>setActiveMode(m.key)); modeWrap.appendChild(b); modeButtons[m.key]=b; });
+  function setActiveMode(k){
+    activeMode=k;
+    Object.values(modeButtons).forEach(el=>el.classList.remove('active'));
+    if(modeButtons[k]) modeButtons[k].classList.add('active');
+  }
+  modes.forEach(m=>{
+    const b=document.createElement('button');
+    b.className='fbp-chip'; b.textContent=m.label; b.dataset.mode=m.key;
+    b.addEventListener('click',()=>setActiveMode(m.key));
+    modeWrap.appendChild(b); modeButtons[m.key]=b;
+  });
   setActiveMode('likes');
 
   // ===== refs & utils =====
@@ -209,12 +262,16 @@
   const hudToggle = hud.querySelector('#fbp-hud-toggle');
   const panelPauseBtn = ui.querySelector('#fbp-pause');
 
-  let POST_URL=location.href; function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
+  let POST_URL=location.href;
+  function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
   let POST_KEY=postKeyFromURL(POST_URL);
-  function setPostKeyLabel(){ postKeyEl.textContent=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY); postKeyEl.title=POST_KEY; }
+  function setPostKeyLabel(){
+    const short=(POST_KEY.length>42? (POST_KEY.slice(0,42)+'…'):POST_KEY);
+    postKeyEl.innerHTML='<a href="'+POST_KEY+'" target="_blank" title="'+POST_KEY+'">'+short+'</a>';
+  }
   setPostKeyLabel();
 
-  (function(){
+  ;(function(){
     function refreshPostKey(){
       POST_URL = location.href;
       POST_KEY = postKeyFromURL(POST_URL);
@@ -225,10 +282,13 @@
     history.replaceState = function(){ const r=_replace.apply(this, arguments); refreshPostKey(); return r; };
     window.addEventListener('popstate', refreshPostKey);
     let last = location.href;
-    setInterval(function(){ if(location.href!==last){ last=location.href; refreshPostKey(); } },1000);
+    setInterval(()=>{ if(location.href!==last){ last=location.href; refreshPostKey(); } },1000);
   })();
 
-  ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }catch{ toast('Could not copy URL'); }});
+  ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }
+    catch{ toast('Could not copy URL'); }
+  });
 
   const store=new Map(); const counts={likes:0,comments:0,shares:0};
   function resetForThisPost(){ store.clear(); counts.likes=counts.comments=counts.shares=0; updateStats(); renderPreview(); }
@@ -237,18 +297,53 @@
   function closestScrollable(n){for(let p=n;p;p=p.parentElement) if(isScrollableY(p)) return p; return null;}
   let sc=null;
 
-  function normalizeFB(href){ try{ const u=new URL(href,'https://www.facebook.com'); if(/^l\.facebook\.com$|^lm\.facebook\.com$/i.test(u.hostname)){ const redir=u.searchParams.get('u'); if(redir) return normalizeFB(decodeURIComponent(redir)); } u.protocol='https:'; u.hostname='www.facebook.com'; u.hash=''; if(u.pathname==='/profile.php'){ const id=u.searchParams.get('id'); if(!id) return null; u.search='?id='+encodeURIComponent(id); } else { u.search=''; } u.pathname=u.pathname.replace(/\/+/g,'/').replace(/\/$/,''); return u.toString(); }catch(e){ return null; } }
-  function looksLikeProfile(url){ try{ const p=new URL(url).pathname.toLowerCase(); if(p==='/profile.php') return true; if(/^\/people\/[^/]+\/\d+$/.test(p)) return true; if(/^\/[a-z0-9.\-_]+$/.test(p)){ const bad=new Set(['events','groups','pages','marketplace','watch','gaming','reel','reels','photo','photos','videos','privacy','help','settings','notifications','bookmarks','messages','friends','stories','story.php','permalink.php','ufi','reactions','posts','share']); return !bad.has(p.slice(1)); } return false; }catch(e){ return false; } }
+  function normalizeFB(href){ try{
+    const u=new URL(href,'https://www.facebook.com');
+    if(/^l\.facebook\.com$|^lm\.facebook\.com$/i.test(u.hostname)){ const redir=u.searchParams.get('u'); if(redir) return normalizeFB(decodeURIComponent(redir)); }
+    u.protocol='https:'; u.hostname='www.facebook.com'; u.hash='';
+    if(u.pathname==='/profile.php'){ const id=u.searchParams.get('id'); if(!id) return null; u.search='?id='+encodeURIComponent(id); } else { u.search=''; }
+    u.pathname=u.pathname.replace(/\/+/g,'/').replace(/\/$/,''); return u.toString();
+  }catch(e){ return null; } }
+  function looksLikeProfile(url){ try{
+    const p=new URL(url).pathname.toLowerCase();
+    if(p==='/profile.php') return true;
+    if(/^\/people\/[^/]+\/\d+$/.test(p)) return true;
+    if(/^\/[a-z0-9.\-_]+$/.test(p)){
+      const bad=new Set(['events','groups','pages','marketplace','watch','gaming','reel','reels','photo','photos','videos','privacy','help','settings','notifications','bookmarks','messages','friends','stories','story.php','permalink.php','ufi','reactions','posts','share']);
+      return !bad.has(p.slice(1));
+    }
+    return false;
+  }catch(e){ return false; } }
   const isVisible=el=>{ const r=el.getBoundingClientRect(), cs=getComputedStyle(el); return r.width>0&&r.height>0&&cs.visibility==='visible'&&cs.display!=='none'; };
   const inMessageBody=a=>!!(a.closest('[data-ad-preview="message"],[data-ad-comet-preview="message"]'));
   const isCommentArticleNode=n=>{ const art=n.closest&&n.closest('[role="article"]'); if(!art) return false; const al=(art.getAttribute('aria-label')||'').toLowerCase(); return al.startsWith('comment by')||al.startsWith('reply by'); };
   function cleanName(s){ if(!s) return ''; s=s.replace(/\b(profile|cover)\s+(picture|photo)\s+(of|for)\s*/ig,''); s=s.replace(/\s*[·•]\s*\d+\s*[smhdw]\b.*$/i,''); s=s.replace(/\s*\b(seconds?|minutes?|hours?|days?|weeks?|months?|years?)\s+ago\b.*$/i,''); return s.trim(); }
-  function getNameFromAnchor(a){ const t=(a.textContent||'').trim(); if(t) return cleanName(t); const al=a.getAttribute('aria-label'); if(al) return cleanName(al); const imgLabel=a.querySelector('[aria-label]')?.getAttribute('aria-label'); if(imgLabel) return cleanName(imgLabel); const imgAlt=a.querySelector('img[alt]')?.getAttribute('alt'); if(imgAlt) return cleanName(imgAlt); return ''; }
+  function getNameFromAnchor(a){
+    const t=(a.textContent||'').trim(); if(t) return cleanName(t);
+    const al=a.getAttribute('aria-label'); if(al) return cleanName(al);
+    const imgLabel=a.querySelector('[aria-label]')?.getAttribute('aria-label'); if(imgLabel) return cleanName(imgLabel);
+    const imgAlt=a.querySelector('img[alt]')?.getAttribute('alt'); if(imgAlt) return cleanName(imgAlt);
+    return '';
+  }
 
   function likeItems(){ return Array.from(sc.querySelectorAll('[role="listitem"],[data-visualcompletion="ignore-dynamic"]')).filter(isVisible); }
-  function pickLikeAnchor(item){ const header=item.querySelector('[data-ad-rendering-role="profile_name"] a[href]'); if(header) return header; const anchors=Array.from(item.querySelectorAll('a[href]')).filter(isVisible); const withText=anchors.find(a=>(a.textContent||'').trim()&&looksLikeProfile(normalizeFB(a.getAttribute('href')))); return withText||anchors[0]||null; }
+  function pickLikeAnchor(item){
+    const header=item.querySelector('[data-ad-rendering-role="profile_name"] a[href]'); if(header) return header;
+    const anchors=Array.from(item.querySelectorAll('a[href]')).filter(isVisible);
+    const withText=anchors.find(a=>(a.textContent||'').trim()&&looksLikeProfile(normalizeFB(a.getAttribute('href'))));
+    return withText||anchors[0]||null;
+  }
   function commentArticles(){ return Array.from(sc.querySelectorAll('[role="article"][aria-label^="Comment by "]')).filter(isVisible); }
-  function pickCommentAnchor(article){ const candidates=Array.from(article.querySelectorAll('a[href]')).filter(isVisible); for(const a of candidates){ if(inMessageBody(a)) continue; const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) continue; const txt=(a.textContent||'').trim(); if(!txt) continue; if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) continue; return a; } return null; }
+  function pickCommentAnchor(article){
+    const candidates=Array.from(article.querySelectorAll('a[href]')).filter(isVisible);
+    for(const a of candidates){
+      if(inMessageBody(a)) continue;
+      const url=normalizeFB(a.getAttribute('href')); if(!looksLikeProfile(url)) continue;
+      const txt=(a.textContent||'').trim(); if(!txt) continue;
+      if(/\bago\b/i.test(txt) || /^[0-9]+\s*[smhdw]$/i.test(txt)) continue;
+      return a;
+    } return null;
+  }
 
   function sharerAnchors(root){
     const R = root || sc;
