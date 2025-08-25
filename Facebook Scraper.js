@@ -130,9 +130,9 @@
 
   ui.innerHTML =
     '<div id="fbp-head">' +
-      '<div id="fbp-title">FB People Scraper</div>' +
-      '<button id="fbp-copyurl" title="Copy post URL" class="fbp-btn round" style="height:28px; flex:0 0 auto; white-space:nowrap">Copy URL</button>' +
-      '<div id="fbp-postkey" title=""></div>' +
+    '<div id="fbp-title">FB People Scraper</div>' +
+    '<button id="fbp-copyurl" aria-label="Copy URL" title="Copy URL" class="fbp-btn round" style="height:28px;width:36px;padding:0;flex:0 0 36px">⧉</button>' +
+    '<div id="fbp-postkey" title=""></div>' +
       '<div id="fbp-win">' +
         '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn winbtn">–</button>' +
         '<button id="fbp-close" aria-label="Close" title="Close" class="fbp-btn winbtn close">×</button>' +
