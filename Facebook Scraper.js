@@ -1,9 +1,9 @@
-// FB People Scraper — footer aligns under preview (no overlap), sticky when space is tight; pause/play icon
-(async function FB_Export_Persons_UNIFIED_v17o(){
+// FB People Scraper — v17o-fix: chips visible, URL visible/copyable, footer never overlaps
+(async function FB_Export_Persons_UNIFIED_v17o_fix(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
-  const PAUSE = { likes: 1700, comments: 1900, shares: 2000 }; // slightly faster
+  const PAUSE = { likes: 1700, comments: 1900, shares: 2000 };
   const STABLE_LIMIT = 10;
   const EMPTY_PASSES = 4;
 
@@ -54,29 +54,36 @@
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
-      :root{ --fbp-bar-h: 46px; }
       @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
       #fbp-panel, #fbp-panel * { box-sizing:border-box }
       #fbp-panel { display:flex; flex-direction:column; overflow:hidden }
       #fbp-panel button { transition: transform .06s ease, background-color .12s ease, border-color .12s ease, opacity .12s ease; }
       #fbp-panel button:active { transform: translateY(1px) scale(.99); }
 
-      /* FB-like sticky header (draggable) */
+      /* Header */
       #fbp-head{
         position:sticky; top:0; z-index:3;
-        background:#1d2129;
+        background:#1d2129; color:#e6e6e6;
         height:38px; display:flex; align-items:center; gap:8px;
         padding:0 8px 6px 10px; cursor:grab;
         border-bottom:1px solid #2a2f3a;
       }
       #fbp-head:active{ cursor:grabbing; }
       #fbp-title{ font-weight:700; white-space:nowrap }
-      #fbp-postkey{ opacity:.75; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
-      #fbp-postkey a{ color:#8ab4ff; text-decoration:none }
+      #fbp-postkey{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+      #fbp-postkey a{ color:#8ab4ff !important; text-decoration:none }
       #fbp-postkey a:hover{ text-decoration:underline }
 
-      .fbp-chip { padding:6px 10px;border-radius:999px;border:1px solid #384155;background:#171a20;color:#e6e6e6;cursor:pointer }
-      .fbp-chip.active { border-color:#3b7cff;background:#1a2337; box-shadow:inset 0 0 0 1px #2b3960; }
+      /* Chips: use divs (FB styles sometimes mess with <button>) */
+      .fbp-chip{
+        display:inline-flex; align-items:center;
+        padding:6px 10px; margin:0; border-radius:999px;
+        border:1px solid #384155; background:#171a20; color:#e6e6e6;
+        cursor:pointer; user-select:none; font:12px system-ui,-apple-system,Segoe UI,Roboto;
+      }
+      .fbp-chip:hover{ filter:brightness(1.08) }
+      .fbp-chip.active{ border-color:#3b7cff;background:#1a2337; box-shadow:inset 0 0 0 1px #2b3960; }
+      #fbp-modes{ display:flex; gap:6px; flex-wrap:wrap; min-height:32px }
 
       .fbp-btn{ border:1px solid #2a2f3a; background:#141823; color:#dfe3ee; border-radius:8px; padding:8px; cursor:pointer }
       .fbp-btn.primary{ border-color:#3b7cff; background:#2353ff; color:#fff; font-weight:600 }
@@ -90,23 +97,22 @@
       #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; line-height:1; font-size:16px; font-weight:700; border-radius:8px; }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      /* Body reserves space so footer never overlaps */
       #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px 8px 6px; }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
 
-      /* Footer bar absolutely positioned; JS will pin it flush under preview or to panel bottom if tight */
-      #fbp-bar{
-        position:absolute; left:8px; right:8px; height:var(--fbp-bar-h);
-        display:flex; align-items:center; gap:8px; z-index:4;
-        background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px; box-shadow:0 8px 22px rgba(0,0,0,.35);
-      }
-      #fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
-      #fbp-bar .grow{ flex:1 }
+      /* Preview */
+      #fbp-prev{ border:1px solid #293042;border-radius:8px; }
 
-      /* Give the preview section a bottom margin equal to the bar height so visuals never overlap */
-      #fbp-preview-wrap{ margin-bottom: calc(var(--fbp-bar-h) + 10px); }
+      /* Footer under preview (no overlap) */
+      .fbp-bar{
+        display:flex; align-items:center; gap:8px; margin-top:8px;
+        background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px;
+        box-shadow:0 8px 22px rgba(0,0,0,.35);
+      }
+      .fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
+      .fbp-bar .grow{ flex:1 }
     `;
     document.head.appendChild(style);
   })();
@@ -145,7 +151,7 @@
     '<div id="fbp-body">' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">1) Choose what to collect</div>' +
-        '<div id="fbp-modes" style="display:flex;gap:6px;flex-wrap:wrap"></div>' +
+        '<div id="fbp-modes"></div>' +
       '</div>' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">2) Select panel & start</div>' +
@@ -173,14 +179,14 @@
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>Preview (first 50)</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev" style="height:80px;overflow:hidden"></div>' +
+        '<div id="fbp-bar" class="fbp-bar">' +
+          '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause">⏸</button>' +
+          '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
+          '<button id="fbp-dl" class="fbp-btn green grow" title="Download CSV">⬇ Download CSV</button>' +
+          '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset">↻</button>' +
+        '</div>' +
       '</div>' +
-    '</div>' +
-    '<div id="fbp-bar" style="bottom:8px">' +   /* JS may switch to top positioning */
-      '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause">⏸</button>' +
-      '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
-      '<button id="fbp-dl" class="fbp-btn green grow" title="Download CSV">⬇ Download CSV</button>' +
-      '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset">↻</button>' +
     '</div>';
   document.body.appendChild(ui);
 
@@ -210,12 +216,18 @@
         ui.style.resize = 'both';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
       }
-      positionBar(); // keep footer placed correctly
     }
     minBtn.addEventListener('click', ()=>applyMin(!minimized));
     applyMin(minimized);
 
-    const ro = new ResizeObserver(()=>positionBar());
+    const ro = new ResizeObserver(entries=>{
+      for(const e of entries){
+        if(minimized) return;
+        const w = Math.round(e.contentRect.width);
+        const h = Math.round(e.contentRect.height);
+        localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
+      }
+    });
     ro.observe(ui);
   })();
 
@@ -263,7 +275,7 @@
     }, true);
   })();
 
-  // ===== modes =====
+  // ===== modes (Likes / Shares / Comments) =====
   const modes=[{key:'likes',label:'Likes'},{key:'shares',label:'Shares'},{key:'comments',label:'Comments'}];
   const modeWrap=ui.querySelector('#fbp-modes'); let activeMode='likes'; const modeButtons={};
   function setActiveMode(k){
@@ -272,9 +284,10 @@
     if(modeButtons[k]) modeButtons[k].classList.add('active');
   }
   modes.forEach(m=>{
-    const b=document.createElement('button');
-    b.className='fbp-chip'; b.textContent=m.label; b.dataset.mode=m.key;
+    const b=document.createElement('div'); // div instead of button
+    b.className='fbp-chip'; b.textContent=m.label; b.dataset.mode=m.key; b.setAttribute('role','button'); b.tabIndex=0;
     b.addEventListener('click',()=>setActiveMode(m.key));
+    b.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); setActiveMode(m.key);} });
     modeWrap.appendChild(b); modeButtons[m.key]=b;
   });
   setActiveMode('likes');
@@ -466,13 +479,16 @@
   // ===== PREVIEW =====
   function renderPreview(){
     const rows = Array.from(store.values());
-
     if(rows.length === 0){
       prevBox.style.height = '80px';
       prevBox.style.overflowY = 'hidden';
+      prevBox.style.border = '1px solid #293042';
+      prevBox.style.borderRadius = '8px';
     }else{
-      prevBox.style.height = 'clamp(120px,18vh,230px)'; // ~5–6 rows
+      prevBox.style.height = 'clamp(120px,18vh,230px)';
       prevBox.style.overflowY = 'auto';
+      prevBox.style.border = '1px solid #293042';
+      prevBox.style.borderRadius = '8px';
     }
 
     let head =
@@ -501,7 +517,6 @@
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
     updateStats();
-    positionBar(); // re-place footer after size changes
   }
 
   function escapeHTML(s){ return (s||'').replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
@@ -516,21 +531,6 @@
     const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'facebook_engagements_export_from_fb.csv' });
     document.body.appendChild(link); link.click(); link.remove();
   }
-
-  // ===== Position footer so it hugs preview bottom (or panel bottom if there isn't room) =====
-  function positionBar(){
-    const bar = ui.querySelector('#fbp-bar');
-    if(!bar) return;
-    const panelRect = ui.getBoundingClientRect();
-    const prevRect = prevBox.getBoundingClientRect();
-    const barH = bar.offsetHeight || 46;
-    const desiredTop = (prevRect.bottom + 8) - panelRect.top; // 8px gap under preview
-    const maxTop = ui.offsetHeight - barH - 8;                // 8px panel padding
-    const top = Math.min(Math.max(8, desiredTop), maxTop);    // clamp inside panel
-    bar.style.top = top + 'px';
-    bar.style.bottom = '';
-  }
-  window.addEventListener('resize', positionBar);
 
   // ===== Live run indicator =====
   let heartbeat=null, actionsThisRun=0, currentRunStarted=0;
@@ -603,7 +603,7 @@
   }
 
   ui.querySelector('#fbp-go').addEventListener('click', async function(){
-    setPaused(false); // ensure not starting paused
+    setPaused(false);
     toast('Click inside the open panel…', 1800);
 
     const ev = await new Promise(function(res){
@@ -783,8 +783,7 @@
     maybeRender(true);
   }
 
-  // initial preview + initial footer placement
+  // initial preview
   renderPreview();
-  positionBar();
 
 })();
