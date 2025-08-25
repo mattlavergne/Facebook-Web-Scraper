@@ -1,7 +1,8 @@
 // FB People Scraper — v17o_sticky_min2 (fix duplicate vars): sticky footer, min-height floor, header+footer-only minimize, narrower width, recenter hotkey
 (async function FB_Export_Persons_UNIFIED_v17o_sticky_min2(){
-  const MIN_PANEL_HEIGHT = 300;   // smallest non-minimized height
+  let MIN_PANEL_HEIGHT = 300;   // smallest non-minimized height
   const DEFAULT_W = 400, MIN_W = 340;
+  const PANEL_PADDING = '0 0 8px 0';
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const now = ()=>performance.now();
@@ -99,11 +100,11 @@
       #fbp-prev{ border:1px solid #3a3b3c;border-radius:8px; }
 
       /* Footer: sticky in normal mode; absolute in minimized mode */
-      .fbp-bar{ position:sticky; bottom:0; z-index:2; display:flex; align-items:center; gap:8px; margin-top:8px;
+      .fbp-bar{ position:sticky; bottom:0; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;
         background:#242526; border:1px solid #3a3b3c; border-radius:10px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,.2); }
-      .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:8px; z-index:4; }
-      .fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
-      .fbp-bar .grow{ flex:1 }
+      .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:0; margin-top:0; z-index:4; }
+      .fbp-bar .iconbtn{ flex:1 1 44px; min-width:32px; height:32px; display:grid; place-items:center; font-size:16px; border-radius:8px }
+      .fbp-bar .grow{ flex:2 1 100px; min-width:80px; height:32px }
     `;
     document.head.appendChild(style);
   })();
@@ -119,7 +120,7 @@
     minHeight: MIN_PANEL_HEIGHT+'px',
     background:'#242526', color:'#e4e6eb', font:'12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
     border:'1px solid #3a3b3c', borderRadius:'12px', boxShadow:'0 4px 12px rgba(0,0,0,.2)',
-    zIndex:2147483647, padding:'0 0 8px 0',
+    zIndex:2147483647, padding:PANEL_PADDING,
     resize:'both', overflow:'hidden'
   });
 
@@ -184,6 +185,14 @@
     '</div>';
   document.body.appendChild(ui);
 
+  // adjust minimum panel height dynamically to keep controls visible
+  try{
+    const headH = ui.querySelector('#fbp-head')?.offsetHeight || 38;
+    const barH  = ui.querySelector('#fbp-bar')?.offsetHeight || 46;
+    MIN_PANEL_HEIGHT = headH + barH + 120;
+    ui.style.minHeight = MIN_PANEL_HEIGHT + 'px';
+  }catch{}
+
   // ===== Always keep it visible + quick reset hotkey
   (function ensureVisible(){
     const m=8;
@@ -236,15 +245,19 @@
         if(ui.style.width || ui.style.height){ lastSize = { w: ui.offsetWidth, h: ui.offsetHeight }; }
         bodyEl.style.display = 'none';
         ui.style.resize = 'none';
+        ui.style.minHeight = '0';
+        ui.style.padding = '0';
+        moveBar(true);
         const headH = headEl.offsetHeight || 38;
         const barH  = barEl.offsetHeight || 46;
-        ui.style.height = (headH + barH + 16) + 'px';
+        ui.style.height = (headH + barH + 2) + 'px';
         ui.style.width = Math.max(MIN_W, Math.min(lastSize.w || DEFAULT_W, DEFAULT_W)) + 'px';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
-        moveBar(true);
       }else{
         bodyEl.style.display = 'flex';
         ui.style.resize = 'both';
+        ui.style.minHeight = MIN_PANEL_HEIGHT + 'px';
+        ui.style.padding = PANEL_PADDING;
         if(lastSize.w) ui.style.width  = Math.max(lastSize.w, MIN_W) + 'px';
         if(lastSize.h) ui.style.height = Math.max(lastSize.h, MIN_PANEL_HEIGHT) + 'px';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
