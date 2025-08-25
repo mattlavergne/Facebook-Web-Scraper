@@ -186,6 +186,31 @@
     '<div id="fbp-bar-floating" class="fbp-bar"></div>';
   document.body.appendChild(ui);
 
+    // --- keep panel visible even if old coords are bad + quick reset hotkey ---
+  (function ensureVisible(){
+    const m = 8;
+    function clamp(){
+      const w = ui.offsetWidth || 460, h = ui.offsetHeight || 320;
+      const vw = innerWidth, vh = innerHeight;
+      let top = parseInt(getComputedStyle(ui).top,10);    if (!Number.isFinite(top) || top < m || top > vh - 60) top = 16;
+      let right = parseInt(getComputedStyle(ui).right,10);if (!Number.isFinite(right) || right < m || (vw - right - w) < 6) right = 16;
+      ui.style.top = top + 'px';
+      ui.style.right = right + 'px';
+    }
+    clamp();
+    addEventListener('resize', clamp);
+    // Alt+Shift+F to recenter & un-minimize if ever lost
+    addEventListener('keydown', e=>{
+      if(e.altKey && e.shiftKey && (e.key.toLowerCase()==='f')){
+        ui.style.top='16px'; ui.style.right='16px';
+        localStorage.removeItem('fbp_ui_pos');
+        localStorage.setItem('fbp_ui_min','0');
+        // show body again
+        const bodyEl = ui.querySelector('#fbp-body');
+        if (bodyEl && bodyEl.style.display==='none'){ bodyEl.style.display='flex'; ui.style.resize='both'; }
+      }
+    });
+  })();
   // ===== Build identical bars (inline + floating) =====
   function populateBar(el){
     el.innerHTML =
@@ -266,7 +291,8 @@
   ;(function(){
     const head = ui.querySelector('#fbp-head');
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
-    if(pos.top!=null && pos.right!=null){ ui.style.top=pos.top+'px'; ui.style.right=pos.right+'px'; }
+    if (Number.isFinite(pos.top))  ui.style.top  = Math.max(8, Math.min(innerHeight-60, pos.top)) + 'px';
+    if (Number.isFinite(pos.right))ui.style.right= Math.max(8, pos.right) + 'px';
     let sx=0, sy=0, startTop=0, startRight=0, dragging=false;
     head.addEventListener('mousedown', e=>{
       if(e.target.closest('#fbp-win')) return;
