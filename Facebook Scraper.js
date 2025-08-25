@@ -100,11 +100,11 @@
       #fbp-prev{ border:1px solid #3a3b3c;border-radius:8px; }
 
       /* Footer: sticky in normal mode; absolute in minimized mode */
-      .fbp-bar{ position:sticky; bottom:0; z-index:2; display:flex; align-items:center; gap:8px; margin-top:8px;
+      .fbp-bar{ position:sticky; bottom:0; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;
         background:#242526; border:1px solid #3a3b3c; border-radius:10px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,.2); }
       .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:0; margin-top:0; z-index:4; }
-      .fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
-      .fbp-bar .grow{ flex:1 }
+      .fbp-bar .iconbtn{ flex:1 1 44px; min-width:32px; height:32px; display:grid; place-items:center; font-size:16px; border-radius:8px }
+      .fbp-bar .grow{ flex:2 1 100px; min-width:80px; height:32px }
     `;
     document.head.appendChild(style);
   })();
@@ -247,12 +247,12 @@
         ui.style.resize = 'none';
         ui.style.minHeight = '0';
         ui.style.padding = '0';
+        moveBar(true);
         const headH = headEl.offsetHeight || 38;
         const barH  = barEl.offsetHeight || 46;
-        ui.style.height = (headH + barH) + 'px';
+        ui.style.height = (headH + barH + 2) + 'px';
         ui.style.width = Math.max(MIN_W, Math.min(lastSize.w || DEFAULT_W, DEFAULT_W)) + 'px';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
-        moveBar(true);
       }else{
         bodyEl.style.display = 'flex';
         ui.style.resize = 'both';
