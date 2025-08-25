@@ -1,5 +1,7 @@
-// FB People Scraper — footer aligns under preview (no overlap), sticky when space is tight; pause/play icon
-(async function FB_Export_Persons_UNIFIED_v17o(){
+// FB People Scraper — fix missing mode chips, keep URL visible, and make footer part of preview (no overlap).
+// Also shows a separate floating footer only when minimized. Pause button toggles ⏸/▶.
+// Speed kept snappy and safe.
+(async function FB_Export_Persons_UNIFIED_v17p(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
@@ -44,7 +46,7 @@
     const origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.send = function(...a){
       this.addEventListener('load', function(){
-        if(this.status===429 || this.status===403){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
+        if(this.status===429 || this.status===403)){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
       });
       return origSend.apply(this, a);
     };
@@ -54,7 +56,6 @@
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
-      :root{ --fbp-bar-h: 46px; }
       @keyframes fbp-pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
       #fbp-panel, #fbp-panel * { box-sizing:border-box }
       #fbp-panel { display:flex; flex-direction:column; overflow:hidden }
@@ -70,12 +71,13 @@
         border-bottom:1px solid #2a2f3a;
       }
       #fbp-head:active{ cursor:grabbing; }
-      #fbp-title{ font-weight:700; white-space:nowrap }
-      #fbp-postkey{ opacity:.75; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+      #fbp-title{ font-weight:700; white-space:nowrap; color:#e6e6e6 }
+      #fbp-postkey{ opacity:.85; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
       #fbp-postkey a{ color:#8ab4ff; text-decoration:none }
       #fbp-postkey a:hover{ text-decoration:underline }
 
       .fbp-chip { padding:6px 10px;border-radius:999px;border:1px solid #384155;background:#171a20;color:#e6e6e6;cursor:pointer }
+      .fbp-chip:hover { filter:brightness(1.08) }
       .fbp-chip.active { border-color:#3b7cff;background:#1a2337; box-shadow:inset 0 0 0 1px #2b3960; }
 
       .fbp-btn{ border:1px solid #2a2f3a; background:#141823; color:#dfe3ee; border-radius:8px; padding:8px; cursor:pointer }
@@ -90,28 +92,32 @@
       #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; line-height:1; font-size:16px; font-weight:700; border-radius:8px; }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      /* Body reserves space so footer never overlaps */
       #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:140px; padding:6px 6px 8px 6px; }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
 
-      /* Footer bar absolutely positioned; JS will pin it flush under preview or to panel bottom if tight */
-      #fbp-bar{
-        position:absolute; left:8px; right:8px; height:var(--fbp-bar-h);
-        display:flex; align-items:center; gap:8px; z-index:4;
-        background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px; box-shadow:0 8px 22px rgba(0,0,0,.35);
-      }
-      #fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
-      #fbp-bar .grow{ flex:1 }
+      /* Preview block: footer INSIDE this card to prevent overlap */
+      #fbp-preview-wrap{ }
+      #fbp-prev{ border:1px solid #293042;border-radius:8px; }
 
-      /* Give the preview section a bottom margin equal to the bar height so visuals never overlap */
-      #fbp-preview-wrap{ margin-bottom: calc(var(--fbp-bar-h) + 10px); }
+      /* Shared footer-bar style (inline + floating) */
+      .fbp-bar{
+        display:flex; align-items:center; gap:8px;
+        background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px;
+        box-shadow:0 8px 22px rgba(0,0,0,.35);
+      }
+      .fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
+      .fbp-bar .grow{ flex:1 }
+      /* Inline bar sits under preview, never overlaps */
+      #fbp-bar-inline{ margin-top:8px; }
+      /* Floating bar appears only when minimized */
+      #fbp-bar-floating{ position:absolute; left:8px; right:8px; bottom:8px; z-index:4; display:none; }
     `;
     document.head.appendChild(style);
   })();
 
-  // Remove any old panel
+  // Remove old panel
   document.getElementById('fbp-panel')?.remove();
 
   // ===== UI panel =====
@@ -173,16 +179,25 @@
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>Preview (first 50)</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev" style="height:80px;overflow:hidden"></div>' +
+        '<div id="fbp-bar-inline" class="fbp-bar"></div>' +
       '</div>' +
     '</div>' +
-    '<div id="fbp-bar" style="bottom:8px">' +   /* JS may switch to top positioning */
-      '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause">⏸</button>' +
-      '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
-      '<button id="fbp-dl" class="fbp-btn green grow" title="Download CSV">⬇ Download CSV</button>' +
-      '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset">↻</button>' +
-    '</div>';
+    '<div id="fbp-bar-floating" class="fbp-bar"></div>';
   document.body.appendChild(ui);
+
+  // ===== Build identical bars (inline + floating) =====
+  function populateBar(el){
+    el.innerHTML =
+      '<button class="fbp-btn iconbtn btn-pause" title="Pause">⏸</button>' +
+      '<button class="fbp-btn iconbtn btn-stop" title="Stop">■</button>' +
+      '<button class="fbp-btn green grow btn-dl" title="Download CSV">⬇ Download CSV</button>' +
+      '<button class="fbp-btn iconbtn btn-reset" title="Reset">↻</button>';
+  }
+  const barInline   = ui.querySelector('#fbp-bar-inline');
+  const barFloating = ui.querySelector('#fbp-bar-floating');
+  populateBar(barInline);
+  populateBar(barFloating);
 
   // ===== Window controls =====
   ui.querySelector('#fbp-close').addEventListener('click', ()=>ui.remove());
@@ -192,6 +207,12 @@
 
     let minimized = localStorage.getItem('fbp_ui_min') === '1';
     let lastSize = { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
+
+    function updateBarsForMin(){
+      // Inline bar visible only when NOT minimized. Floating bar visible only when minimized.
+      barInline.style.display   = minimized ? 'none' : 'flex';
+      barFloating.style.display = minimized ? 'flex' : 'none';
+    }
 
     function applyMin(min){
       minimized = min;
@@ -210,12 +231,19 @@
         ui.style.resize = 'both';
         minBtn.textContent = '–'; minBtn.title = 'Minimize';
       }
-      positionBar(); // keep footer placed correctly
+      updateBarsForMin();
     }
     minBtn.addEventListener('click', ()=>applyMin(!minimized));
     applyMin(minimized);
 
-    const ro = new ResizeObserver(()=>positionBar());
+    const ro = new ResizeObserver(entries=>{
+      for(const e of entries){
+        if(minimized) return;
+        const w = Math.round(e.contentRect.width);
+        const h = Math.round(e.contentRect.height);
+        localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
+      }
+    });
     ro.observe(ui);
   })();
 
@@ -263,7 +291,7 @@
     }, true);
   })();
 
-  // ===== modes =====
+  // ===== modes (Likes / Shares / Comments) =====
   const modes=[{key:'likes',label:'Likes'},{key:'shares',label:'Shares'},{key:'comments',label:'Comments'}];
   const modeWrap=ui.querySelector('#fbp-modes'); let activeMode='likes'; const modeButtons={};
   function setActiveMode(k){
@@ -277,7 +305,7 @@
     b.addEventListener('click',()=>setActiveMode(m.key));
     modeWrap.appendChild(b); modeButtons[m.key]=b;
   });
-  setActiveMode('likes');
+  setActiveMode('likes'); // visible & clickable
 
   // ===== refs & utils =====
   const prevBox=ui.querySelector('#fbp-prev');
@@ -292,10 +320,11 @@
   const prog = ui.querySelector('#fbp-prog');
   const opsEl = ui.querySelector('#fbp-ops');
 
-  const btnPause = ui.querySelector('#fbp-pause');
-  const btnStop  = ui.querySelector('#fbp-stop');
-  const btnDL    = ui.querySelector('#fbp-dl');
-  const btnReset = ui.querySelector('#fbp-reset');
+  // Buttons (both bars)
+  const allPauseBtns = Array.from(ui.querySelectorAll('.btn-pause'));
+  const allStopBtns  = Array.from(ui.querySelectorAll('.btn-stop'));
+  const allDLBtns    = Array.from(ui.querySelectorAll('.btn-dl'));
+  const allResetBtns = Array.from(ui.querySelectorAll('.btn-reset'));
 
   let POST_URL=location.href;
   function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
@@ -466,13 +495,16 @@
   // ===== PREVIEW =====
   function renderPreview(){
     const rows = Array.from(store.values());
-
     if(rows.length === 0){
       prevBox.style.height = '80px';
       prevBox.style.overflowY = 'hidden';
+      prevBox.style.border = '1px solid #293042';
+      prevBox.style.borderRadius = '8px';
     }else{
-      prevBox.style.height = 'clamp(120px,18vh,230px)'; // ~5–6 rows
+      prevBox.style.height = 'clamp(120px,18vh,230px)'; // ~5–6 rows visible
       prevBox.style.overflowY = 'auto';
+      prevBox.style.border = '1px solid #293042';
+      prevBox.style.borderRadius = '8px';
     }
 
     let head =
@@ -501,7 +533,6 @@
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
     updateStats();
-    positionBar(); // re-place footer after size changes
   }
 
   function escapeHTML(s){ return (s||'').replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
@@ -516,21 +547,6 @@
     const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'facebook_engagements_export_from_fb.csv' });
     document.body.appendChild(link); link.click(); link.remove();
   }
-
-  // ===== Position footer so it hugs preview bottom (or panel bottom if there isn't room) =====
-  function positionBar(){
-    const bar = ui.querySelector('#fbp-bar');
-    if(!bar) return;
-    const panelRect = ui.getBoundingClientRect();
-    const prevRect = prevBox.getBoundingClientRect();
-    const barH = bar.offsetHeight || 46;
-    const desiredTop = (prevRect.bottom + 8) - panelRect.top; // 8px gap under preview
-    const maxTop = ui.offsetHeight - barH - 8;                // 8px panel padding
-    const top = Math.min(Math.max(8, desiredTop), maxTop);    // clamp inside panel
-    bar.style.top = top + 'px';
-    bar.style.bottom = '';
-  }
-  window.addEventListener('resize', positionBar);
 
   // ===== Live run indicator =====
   let heartbeat=null, actionsThisRun=0, currentRunStarted=0;
@@ -564,10 +580,12 @@
 
   function refreshControls(){
     const running = !!heartbeat;
-    btnPause.disabled = !running;
-    btnStop.disabled  = !running;
-    btnPause.textContent = (running && pausedByUser) ? '▶' : '⏸';
-    btnPause.title = (running && pausedByUser) ? 'Resume' : 'Pause';
+    allPauseBtns.forEach(b=>{
+      b.disabled = !running;
+      b.textContent = (running && pausedByUser) ? '▶' : '⏸';
+      b.title = (running && pausedByUser) ? 'Resume' : 'Pause';
+    });
+    allStopBtns.forEach(b=>b.disabled = !running);
   }
 
   function setPaused(p){
@@ -581,15 +599,16 @@
     refreshControls();
   }
 
-  btnPause.addEventListener('click',()=>setPaused(!pausedByUser));
-  btnStop.addEventListener('click', ()=>{
+  // Bind both bars’ buttons
+  allPauseBtns.forEach(b=>b.addEventListener('click',()=>setPaused(!pausedByUser)));
+  allStopBtns.forEach(b=>b.addEventListener('click', ()=>{
     runToken++; // invalidate
     stopHeartbeat();
     setPaused(false);
     setUIBusy(false, 'Stopped');
-  });
-  btnDL.addEventListener('click', downloadMerged);
-  btnReset.addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
+  }));
+  allDLBtns.forEach(b=>b.addEventListener('click', downloadMerged));
+  allResetBtns.forEach(b=>b.addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); }));
 
   // ===== Run control =====
   let runToken=0;
@@ -783,8 +802,7 @@
     maybeRender(true);
   }
 
-  // initial preview + initial footer placement
+  // initial preview
   renderPreview();
-  positionBar();
 
 })();
