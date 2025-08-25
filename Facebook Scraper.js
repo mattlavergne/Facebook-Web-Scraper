@@ -64,10 +64,10 @@
 
       #fbp-head{
         position:sticky; top:0; z-index:3;
-        background:#1d2129; color:#e6e6e6;
+        background:#242526; color:#e4e6eb;
         height:38px; display:flex; align-items:center; gap:8px;
         padding:0 8px 6px 10px; cursor:grab;
-        border-bottom:1px solid #2a2f3a;
+        border-bottom:1px solid #3a3b3c;
       }
       #fbp-head:active{ cursor:grabbing; }
       #fbp-title{ font-weight:700; white-space:nowrap }
@@ -75,13 +75,13 @@
       #fbp-postkey a{ color:#8ab4ff !important; text-decoration:none }
       #fbp-postkey a:hover{ text-decoration:underline }
 
-      .fbp-chip{ display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; border:1px solid #384155; background:#171a20; color:#e6e6e6; cursor:pointer; user-select:none; }
-      .fbp-chip:hover{ filter:brightness(1.08) }
-      .fbp-chip.active{ border-color:#3b7cff;background:#1a2337; box-shadow:inset 0 0 0 1px #2b3960; }
+      .fbp-chip{ display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; border:1px solid #3a3b3c; background:#3a3b3c; color:#e4e6eb; cursor:pointer; user-select:none; }
+      .fbp-chip:hover{ filter:brightness(1.05) }
+      .fbp-chip.active{ border-color:#2374e1;background:#2374e1; color:#fff; box-shadow:none; }
 
-      .fbp-btn{ border:1px solid #2a2f3a; background:#141823; color:#dfe3ee; border-radius:8px; padding:8px; cursor:pointer }
-      .fbp-btn.primary{ border-color:#3b7cff; background:#2353ff; color:#fff; font-weight:600 }
-      .fbp-btn.green{ border-color:#2c8a3f; background:#1d7a31; color:#fff; font-weight:600 }
+      .fbp-btn{ border:1px solid #3a3b3c; background:#3a3b3c; color:#e4e6eb; border-radius:8px; padding:8px; cursor:pointer }
+      .fbp-btn.primary{ border-color:#2374e1; background:#2374e1; color:#fff; font-weight:600 }
+      .fbp-btn.green{ border-color:#42b72a; background:#42b72a; color:#fff; font-weight:600 }
       .fbp-btn.round{ border-radius:999px; padding:4px 10px; min-width:28px; text-align:center }
       .fbp-btn:hover{ filter:brightness(1.06) }
       .fbp-btn:disabled{ opacity:.65; cursor:not-allowed }
@@ -93,14 +93,14 @@
       /* Make body scrollable so footer can stick to its bottom */
       #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:140px; padding:6px 6px 8px 6px; }
       #fbp-panel table { width:100% }
-      #fbp-panel table tr:hover td { background:#121722 }
+      #fbp-panel table tr:hover td { background:#303031 }
       #fbp-prog { transition: width .2s ease }
 
-      #fbp-prev{ border:1px solid #293042;border-radius:8px; }
+      #fbp-prev{ border:1px solid #3a3b3c;border-radius:8px; }
 
       /* Footer: sticky in normal mode; absolute in minimized mode */
       .fbp-bar{ position:sticky; bottom:0; z-index:2; display:flex; align-items:center; gap:8px; margin-top:8px;
-        background:#0f1115; border:1px solid #2a2f3a; border-radius:10px; padding:6px; box-shadow:0 8px 22px rgba(0,0,0,.35); }
+        background:#242526; border:1px solid #3a3b3c; border-radius:10px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,.2); }
       .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:8px; z-index:4; }
       .fbp-bar .iconbtn{ width:44px; height:34px; display:grid; place-items:center; font-size:16px; border-radius:8px }
       .fbp-bar .grow{ flex:1 }
@@ -117,8 +117,8 @@
     position:'fixed', right:'16px', top:'16px',
     width: DEFAULT_W+'px', minWidth: MIN_W+'px', maxWidth:'92vw',
     minHeight: MIN_PANEL_HEIGHT+'px',
-    background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
-    border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
+    background:'#242526', color:'#e4e6eb', font:'12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+    border:'1px solid #3a3b3c', borderRadius:'12px', boxShadow:'0 4px 12px rgba(0,0,0,.2)',
     zIndex:2147483647, padding:'0 0 8px 0',
     resize:'both', overflow:'hidden'
   });
@@ -218,7 +218,11 @@
     const minBtn = ui.querySelector('#fbp-min');
 
     let minimized = localStorage.getItem('fbp_ui_min') === '1';
-    let lastSize = { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
+    let saved = null;
+    try{ saved = JSON.parse(localStorage.getItem('fbp_ui_size')||'null'); }catch{}
+    let lastSize = (saved && saved.w && saved.h)
+      ? { w: saved.w, h: saved.h }
+      : { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
 
     function moveBar(min){
       if(min){ ui.appendChild(barEl); barEl.classList.add('float-bottom'); }
@@ -259,6 +263,7 @@
         ui.style.width  = w + 'px';
         ui.style.height = h + 'px';
         localStorage.setItem('fbp_ui_size', JSON.stringify({w,h}));
+        lastSize = { w, h };
       }
     });
     ro.observe(ui);
@@ -273,7 +278,7 @@
   }
   function toast(msg, ms=1600){
     const t=document.createElement('div');
-    Object.assign(t.style,{ background:'#1b5cff', color:'#fff', padding:'10px 12px', borderRadius:'10px', boxShadow:'0 8px 22px rgba(0,0,0,.35)', font:'12px system-ui,-apple-system, Segoe UI, Roboto', maxWidth:'280px' });
+    Object.assign(t.style,{ background:'#2374e1', color:'#fff', padding:'10px 12px', borderRadius:'10px', boxShadow:'0 4px 12px rgba(0,0,0,.2)', font:'12px system-ui,-apple-system, Segoe UI, Roboto, sans-serif', maxWidth:'280px' });
     t.textContent=msg; toastWrap.appendChild(t);
     while(toastWrap.children.length>4){ toastWrap.firstChild.remove(); }
     setTimeout(()=>t.remove(), ms);
@@ -505,12 +510,12 @@
     let head =
       '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
         '<colgroup><col style="width:44%"><col style="width:36%"><col style="width:6%"><col style="width:6%"><col style="width:8%"></colgroup>' +
-        '<thead><tr style="position:sticky;top:0;background:#10131a">' +
-          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person_Name</th>' +
-          '<th style="text-align:left;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">Person</th>' +
-          '<th title="Like" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">👍</th>' +
-          '<th title="Share" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">↗</th>' +
-          '<th title="Comment" style="text-align:center;padding:6px;border-bottom:1px solid #2b3344;white-space:nowrap">💬</th>' +
+        '<thead><tr style="position:sticky;top:0;background:#242526">' +
+          '<th style="text-align:left;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">Person_Name</th>' +
+          '<th style="text-align:left;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">Person</th>' +
+          '<th title="Like" style="text-align:center;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">👍</th>' +
+          '<th title="Share" style="text-align:center;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">↗</th>' +
+          '<th title="Comment" style="text-align:center;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">💬</th>' +
         '</tr></thead><tbody>';
 
     let body='';
@@ -518,11 +523,11 @@
     for(let i=0;i<n;i++){
       const r=rows[i];
       body+='<tr>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escapeHTML(r.Person_Name)+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"><a href="'+r.Person+'" target="_blank" style="color:#8ab4ff" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;text-align:center">'+r.Like+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;text-align:center">'+r.Share+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #222;text-align:center">'+r.Comment+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escapeHTML(r.Person_Name)+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"><a href="'+r.Person+'" target="_blank" style="color:#2374e1" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+r.Like+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+r.Share+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+r.Comment+'</td>' +
       '</tr>';
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
