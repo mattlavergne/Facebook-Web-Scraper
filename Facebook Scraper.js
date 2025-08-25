@@ -91,18 +91,18 @@
       #fbp-win .winbtn{ width:36px; height:28px; flex:0 0 36px; display:grid; place-items:center; line-height:1; font-size:16px; font-weight:700; border-radius:8px; }
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
-      /* Make body scrollable so footer can stick to its bottom */
-      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:140px; padding:6px 6px 8px 6px; }
+      /* Scrollable body */
+      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:0; padding:6px; }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#303031 }
       #fbp-prog { transition: width .2s ease }
 
       #fbp-prev{ border:1px solid #3a3b3c;border-radius:8px; }
 
-      /* Footer: sticky in normal mode; absolute in minimized mode */
-      .fbp-bar{ position:sticky; bottom:0; z-index:2; display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;
-        background:#242526; border:1px solid #3a3b3c; border-radius:10px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,.2); }
-      .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:0; margin-top:0; z-index:4; }
+      /* Footer: flex item normally, absolute when minimized */
+      .fbp-bar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;
+        background:#242526; border:1px solid #3a3b3c; border-radius:10px; padding:6px; box-shadow:0 4px 12px rgba(0,0,0,.2); z-index:2; }
+      .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:8px; margin-top:0; z-index:4; }
       .fbp-bar .iconbtn{ flex:1 1 44px; min-width:32px; height:32px; display:grid; place-items:center; font-size:16px; border-radius:8px }
       .fbp-bar .grow{ flex:2 1 100px; min-width:80px; height:32px }
     `;
@@ -175,13 +175,13 @@
           '<span>Preview (first 50)</span>' +
         '</div>' +
         '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
-        '<div id="fbp-bar" class="fbp-bar">' +
-          '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause">⏸</button>' +
-          '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
-          '<button id="fbp-dl" class="fbp-btn green grow" title="Download CSV">⬇ Download CSV</button>' +
-          '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset">↻</button>' +
-        '</div>' +
       '</div>' +
+    '</div>' +
+    '<div id="fbp-bar" class="fbp-bar">' +
+      '<button id="fbp-pause" class="fbp-btn iconbtn" title="Pause">⏸</button>' +
+      '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
+      '<button id="fbp-dl" class="fbp-btn green grow" title="Download CSV">⬇ Download CSV</button>' +
+      '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset">↻</button>' +
     '</div>';
   document.body.appendChild(ui);
 
@@ -189,7 +189,7 @@
   try{
     const headH = ui.querySelector('#fbp-head')?.offsetHeight || 38;
     const barH  = ui.querySelector('#fbp-bar')?.offsetHeight || 46;
-    MIN_PANEL_HEIGHT = headH + barH + 120;
+    MIN_PANEL_HEIGHT = headH + barH + 20;
     ui.style.minHeight = MIN_PANEL_HEIGHT + 'px';
   }catch{}
 
@@ -222,7 +222,6 @@
   (function(){
     const bodyEl = ui.querySelector('#fbp-body');
     const headEl = ui.querySelector('#fbp-head');
-    const previewWrap = ui.querySelector('#fbp-preview-wrap');
     const barEl = ui.querySelector('#fbp-bar');
     const minBtn = ui.querySelector('#fbp-min');
 
@@ -234,8 +233,8 @@
       : { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
 
     function moveBar(min){
-      if(min){ ui.appendChild(barEl); barEl.classList.add('float-bottom'); }
-      else   { previewWrap.appendChild(barEl); barEl.classList.remove('float-bottom'); }
+      if(min){ barEl.classList.add('float-bottom'); }
+      else   { barEl.classList.remove('float-bottom'); }
     }
 
     function applyMin(min){
@@ -250,7 +249,7 @@
         moveBar(true);
         const headH = headEl.offsetHeight || 38;
         const barH  = barEl.offsetHeight || 46;
-        ui.style.height = (headH + barH + 2) + 'px';
+        ui.style.height = (headH + barH + 16) + 'px';
         ui.style.width = Math.max(MIN_W, Math.min(lastSize.w || DEFAULT_W, DEFAULT_W)) + 'px';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
       }else{
