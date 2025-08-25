@@ -1,5 +1,5 @@
-// FB People Scraper — sticky Win11-style top bar, always-visible controls, tighter default layout
-(async function FB_Export_Persons_UNIFIED_v17j(){
+// FB People Scraper — FB-themed sticky top bar (non-overlapping), fixed-size window buttons, shorter preview
+(async function FB_Export_Persons_UNIFIED_v17k(){
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ===== Tuning knobs =====
@@ -59,25 +59,40 @@
       #fbp-panel { display:flex; flex-direction:column }
       #fbp-panel button { transition: transform .06s ease, background-color .12s ease, border-color .12s ease, opacity .12s ease; }
       #fbp-panel button:active { transform: translateY(1px) scale(.99); }
-      /* Win11-like top bar that NEVER hides */
-      #fbp-head { position:sticky; top:0; z-index:2; background:#0f1115; height:36px; display:flex; align-items:center; gap:10px; padding:0 88px 6px 8px; cursor:move; }
-      #fbp-title { font-weight:700; white-space:nowrap }
-      #fbp-postkey a { color:#8ab4ff; text-decoration:none }
-      #fbp-postkey a:hover { text-decoration:underline }
-      #fbp-win { position:absolute; top:6px; right:6px; display:flex; gap:4px; z-index:3 }
-      #fbp-win .winbtn { width:38px; height:28px; border-radius:6px; border:1px solid #2a2f3a; background:#141823; color:#dfe3ee; font-size:16px; line-height:1; display:grid; place-items:center; }
-      #fbp-win .winbtn:hover { background:#1b2130 }
-      #fbp-win .close:hover { background:#c42b1c; color:#fff; border-color:#7a1410 }
-      #fbp-body { flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:140px; padding:0 4px 6px 4px }
-      .fbp-chip { padding:6px 10px;border-radius:999px;border:1px solid #384155;background:#171a20;color:#e6e6e6;cursor:pointer }
-      .fbp-chip.active { border-color:#3b7cff;background:#1a2337; box-shadow:inset 0 0 0 1px #2b3960; }
-      .fbp-btn { border:1px solid #2a2f3a;background:#141823;color:#dfe3ee;border-radius:8px;padding:8px;cursor:pointer }
-      .fbp-btn.primary { border-color:#3b7cff;background:#2353ff;color:#fff;font-weight:600 }
-      .fbp-btn.warn { border-color:#444;background:#181b22 }
-      .fbp-btn.green { border-color:#2c8a3f;background:#1d7a31;color:#fff;font-weight:600 }
-      .fbp-btn.round { border-radius:999px;padding:4px 10px; min-width:28px; text-align:center }
-      .fbp-btn:hover { filter:brightness(1.06) }
-      .fbp-btn:disabled { opacity:.65; cursor:not-allowed }
+
+      /* FB dark header styling — sticky, draggable from the whole bar */
+      #fbp-head{
+        position:sticky; top:0; z-index:2;
+        background:#1d2129; /* FB dark header tone */
+        height:38px; display:flex; align-items:center; gap:8px;
+        padding:0 8px 6px 10px; cursor:grab;
+        border-bottom:1px solid #2a2f3a;
+      }
+      #fbp-head:active{ cursor:grabbing; }
+      #fbp-title{ font-weight:700; white-space:nowrap }
+      #fbp-postkey{ opacity:.75; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+      #fbp-postkey a{ color:#8ab4ff; text-decoration:none }
+      #fbp-postkey a:hover{ text-decoration:underline }
+
+      /* Buttons share the same base style */
+      .fbp-btn{ border:1px solid #2a2f3a; background:#141823; color:#dfe3ee; border-radius:8px; padding:8px; cursor:pointer }
+      .fbp-btn.primary{ border-color:#3b7cff; background:#2353ff; color:#fff; font-weight:600 }
+      .fbp-btn.warn{ border-color:#444; background:#181b22 }
+      .fbp-btn.green{ border-color:#2c8a3f; background:#1d7a31; color:#fff; font-weight:600 }
+      .fbp-btn.round{ border-radius:999px; padding:4px 10px; min-width:28px; text-align:center }
+      .fbp-btn:hover{ filter:brightness(1.06) }
+      .fbp-btn:disabled{ opacity:.65; cursor:not-allowed }
+
+      /* Fixed-size window buttons that DON'T resize and don't overlap */
+      #fbp-win{ display:flex; gap:6px; margin-left:auto }
+      #fbp-win .winbtn{
+        width:36px; height:28px; flex:0 0 36px;
+        display:grid; place-items:center; line-height:1;
+        font-size:16px; font-weight:700; border-radius:8px;
+      }
+      #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
+
+      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:140px; padding:6px 6px 8px 6px }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#121722 }
       #fbp-prog { transition: width .2s ease }
@@ -93,11 +108,11 @@
   const ui = Object.assign(document.createElement('div'), { id:'fbp-panel' });
   Object.assign(ui.style, {
     position:'fixed', right:'16px', top:'16px',
-    width:'420px', minWidth:'380px', maxWidth:'92vw',
+    width:'440px', minWidth:'380px', maxWidth:'92vw',
     height:'', maxHeight:'70vh',
     background:'#0f1115', color:'#e6e6e6', font:'12px system-ui, -apple-system, Segoe UI, Roboto',
     border:'1px solid #2a2f3a', borderRadius:'12px', boxShadow:'0 10px 30px rgba(0,0,0,.45)',
-    zIndex:2147483647, padding:'8px 8px 10px 8px',
+    zIndex:2147483647, padding:'0 0 8px 0',
     resize:'both', overflow:'hidden'
   });
 
@@ -108,23 +123,15 @@
   }catch{}
 
   ui.innerHTML =
-    // always-visible window controls (top-right)
-    '<div id="fbp-win">' +
-      '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="winbtn">−</button>' +
-      '<button id="fbp-close" aria-label="Close" title="Close" class="winbtn close">×</button>' +
-    '</div>' +
-    // header
     '<div id="fbp-head">' +
-      '<div aria-label="Drag" title="Drag" style="width:16px;height:16px;flex:0 0 16px;display:grid;grid-template-columns:repeat(3,4px);grid-template-rows:repeat(3,4px);gap:2px;color:#9aa6b2;opacity:.7">' +
-        '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
-        '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
-        '<span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span><span style="background:currentColor;border-radius:1px"></span>' +
-      '</div>' +
       '<div id="fbp-title">FB People Scraper</div>' +
-      '<button id="fbp-copyurl" title="Copy post URL" class="fbp-btn round" style="margin-left:8px">Copy URL</button>' +
-      '<div id="fbp-postkey" style="opacity:.75;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:8px" title=""></div>' +
+      '<button id="fbp-copyurl" title="Copy post URL" class="fbp-btn round" style="height:28px; flex:0 0 auto; white-space:nowrap">Copy URL</button>' +
+      '<div id="fbp-postkey" title=""></div>' +
+      '<div id="fbp-win">' +
+        '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn winbtn">–</button>' +
+        '<button id="fbp-close" aria-label="Close" title="Close" class="fbp-btn winbtn close">×</button>' +
+      '</div>' +
     '</div>' +
-    // body
     '<div id="fbp-body">' +
       '<div>' +
         '<div style="font-size:11px;opacity:.8;margin-bottom:6px">1) Choose what to collect</div>' +
@@ -171,6 +178,7 @@
   (function(){
     const bodyEl = ui.querySelector('#fbp-body');
     const minBtn = ui.querySelector('#fbp-min');
+
     let minimized = localStorage.getItem('fbp_ui_min') === '1';
     let lastSize = { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
 
@@ -180,7 +188,7 @@
       if(min){
         if(ui.style.width || ui.style.height){ lastSize = { w: ui.offsetWidth, h: ui.offsetHeight }; }
         bodyEl.style.display = 'none';
-        ui.style.width = '320px';
+        ui.style.width = '380px'; // match minWidth to keep header controls visible
         ui.style.height = '';
         ui.style.resize = 'none';
         minBtn.textContent = '▢'; minBtn.title = 'Restore';
@@ -189,7 +197,7 @@
         if(lastSize.w) ui.style.width = Math.max(lastSize.w, 380) + 'px';
         if(lastSize.h) ui.style.height = lastSize.h+'px';
         ui.style.resize = 'both';
-        minBtn.textContent = '−'; minBtn.title = 'Minimize';
+        minBtn.textContent = '–'; minBtn.title = 'Minimize';
       }
     }
     minBtn.addEventListener('click', ()=>applyMin(!minimized));
@@ -234,7 +242,7 @@
     setTimeout(()=>t.remove(), ms);
   }
 
-  // ===== Draggable via top bar =====
+  // ===== draggable (persist) — whole top bar =====
   ;(function(){
     const head = ui.querySelector('#fbp-head');
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
@@ -263,7 +271,7 @@
     }, true);
   })();
 
-  // ===== Modes =====
+  // ===== modes =====
   const modes=[{key:'likes',label:'Likes'},{key:'shares',label:'Shares'},{key:'comments',label:'Comments'}];
   const modeWrap=ui.querySelector('#fbp-modes'); let activeMode='likes'; const modeButtons={};
   function setActiveMode(k){
@@ -736,4 +744,5 @@
 
   // initial preview
   renderPreview();
+
 })();
