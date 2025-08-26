@@ -356,6 +356,11 @@
 
   let POST_URL=location.href;
   function postKeyFromURL(u){ try{ const x=new URL(u); x.hash=''; return x.toString(); }catch(e){ return u; } }
+  function isPostURL(u){
+    try{
+      return /(permalink\.php|[?&](story_fbid|fbid)=|\/posts\/|\/photos\/|\/videos\/|\/reel\/|\/reels\/)/i.test(u);
+    }catch(e){ return false; }
+  }
   function setPostKeyLabel(){
     const postKeyEl=ui.querySelector('#fbp-postkey');
     const key=postKeyFromURL(POST_URL);
@@ -364,7 +369,13 @@
   }
   setPostKeyLabel();
   (function(){
-    function refreshPostKey(){ POST_URL = location.href; setPostKeyLabel(); }
+    function refreshPostKey(){
+      const resolved = resolvePostURL();
+      if (isPostURL(resolved)){
+        POST_URL = resolved;
+        setPostKeyLabel();
+      }
+    }
     const _push = history.pushState, _replace = history.replaceState;
     history.pushState = function(){ const r=_push.apply(this, arguments); refreshPostKey(); return r; };
     history.replaceState = function(){ const r=_replace.apply(this, arguments); refreshPostKey(); return r; };
@@ -466,8 +477,16 @@
       if(/\/posts\//i.test(h)) add(h);
       if(/\/videos\//i.test(h)) add(h);
       if(/\/photos\//i.test(h)) add(h);
+      if(/\/reel(s)?\//i.test(h)) add(h);
     });
-    const score = u => ( (/\/posts\//.test(u)?8:0) + (/(permalink\.php|story_fbid|fbid=)/.test(u)?8:0) + (/\/photos\//.test(u)?4:0) + (/\/videos\//.test(u)?4:0) - ((/[?&]v=/.test(u)&&/\/watch/.test(u))?2:0) );
+    const score = u => (
+      (/\/posts\//.test(u)?8:0) +
+      (/(permalink\.php|story_fbid|fbid=)/.test(u)?8:0) +
+      (/\/photos\//.test(u)?4:0) +
+      (/\/videos\//.test(u)?4:0) +
+      (/\/reel(s)?\//.test(u)?4:0) -
+      ((/[?&]v=/.test(u)&&/\/watch/.test(u))?2:0)
+    );
     let best=null, bestScore=-1; cand.forEach(u=>{ const s=score(u); if(s>bestScore){ best=u; bestScore=s; }});
     return best || location.href;
   }
@@ -635,7 +654,8 @@
     }
 
     const dlg = getDialog(sc);
-    POST_URL = resolvePostURL(dlg);
+    const maybeURL = resolvePostURL(dlg);
+    if (isPostURL(maybeURL)) POST_URL = maybeURL;
     setPostKeyLabel();
 
     const myToken = ++runToken;
