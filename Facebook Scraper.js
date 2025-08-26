@@ -94,12 +94,15 @@
       #fbp-win .winbtn.close:hover{ background:#c42b1c; color:#fff; border-color:#7a1410 }
 
       /* Scrollable body */
-      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:0; padding:6px; }
+      #fbp-body{ flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden; min-height:0; padding:6px; }
       #fbp-panel table { width:100% }
       #fbp-panel table tr:hover td { background:#303031 }
       #fbp-prog { transition: width .2s ease }
 
-      #fbp-prev{ border:1px solid #3a3b3c;border-radius:8px; }
+      /* Preview flexes with available space */
+      #fbp-preview-wrap{ flex:1 1 auto; display:flex; flex-direction:column; min-height:0; max-height:1000px; transition:max-height .2s ease, opacity .2s ease; }
+      #fbp-preview-wrap.hidden{ max-height:0; opacity:0; }
+      #fbp-prev{ flex:1 1 auto; overflow:auto; border:1px solid #3a3b3c; border-radius:8px; }
 
       /* Footer: flex item normally, absolute when minimized */
       .fbp-bar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;
@@ -342,6 +345,7 @@
   setActiveMode('likes');
 
   // ===== refs & utils (single, non-duplicated)
+  const prevWrap  = ui.querySelector('#fbp-preview-wrap');
   const prevBox   = ui.querySelector('#fbp-prev');
   const likeC     = ui.querySelector('#fbp-likec');
   const commentC  = ui.querySelector('#fbp-commentc');
@@ -537,8 +541,13 @@
   // ===== PREVIEW
   function renderPreview(){
     const rows = Array.from(store.values());
-    if(rows.length === 0){ prevBox.style.height='80px'; prevBox.style.overflowY='hidden'; }
-    else { prevBox.style.height='clamp(120px,18vh,230px)'; prevBox.style.overflowY='auto'; }
+    if(rows.length === 0){
+      prevBox.innerHTML = '';
+      prevWrap.classList.add('hidden');
+      updateStats();
+      return;
+    }
+    prevWrap.classList.remove('hidden');
 
     let head =
       '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
@@ -567,8 +576,19 @@
       '</tr>';
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
+    adjustPreviewVisibility();
     updateStats();
   }
+
+  function adjustPreviewVisibility(){
+    if(!prevBox.innerHTML){ prevWrap.classList.add('hidden'); return; }
+    const h = prevWrap.getBoundingClientRect().height;
+    if(h < 40) prevWrap.classList.add('hidden');
+    else prevWrap.classList.remove('hidden');
+  }
+  const _prevRO = new ResizeObserver(()=>adjustPreviewVisibility());
+  _prevRO.observe(ui);
+
   function escapeHTML(s){ return (s||'').replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
   function shorten(s,n){ s=String(s||''); return s.length>n ? (s.slice(0,n-1)+'…') : s; }
 

@@ -9,10 +9,20 @@ Utility script for collecting the people who have liked, commented on, or shared
 3. Paste the contents of [`Facebook Scraper.js`](Facebook%20Scraper.js) into the console and press <kbd>Enter</kbd>.
 4. Use the floating panel to collect data and download the CSV file.
 
-The latest version of the script can also be loaded from jsDelivr:
+The latest version of the script can also be loaded directly from GitHub:
 
 ```
-https://cdn.jsdelivr.net/gh/mattlavergne/Facebook-Web-Scraper@main/Facebook%20Scraper.js
+https://raw.githubusercontent.com/mattlavergne/Facebook-Web-Scraper/main/Facebook%20Scraper.js
+```
+
+To use the scraper as a Tampermonkey userscript, reference the same URL in an `@require` directive:
+
+```
+// ==UserScript==
+// @name         FB Web Scraper Loader
+// @match        *://www.facebook.com/*
+// @require      https://raw.githubusercontent.com/mattlavergne/Facebook-Web-Scraper/main/Facebook%20Scraper.js
+// ==/UserScript==
 ```
 
 ## Configuration
@@ -29,14 +39,6 @@ window.FBP_CONFIG = {
 ```
 
 Only the specified fields override the defaults.
-
-## Cache purge
-
-If you update the script and serve it via jsDelivr, you may need to purge the CDN cache:
-
-```
-https://purge.jsdelivr.net/gh/mattlavergne/Facebook-Web-Scraper@main/Facebook%20Scraper.js
-```
 
 Use responsibly and respect Facebook's terms of service.
 
