@@ -7,12 +7,14 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const now = ()=>performance.now();
 
+  const USER_CONFIG = window.FBP_CONFIG || {};
+
   // ===== Tuning knobs =====
-  const PAUSE = { likes: 1500, comments: 1700, shares: 1800 };
+  const PAUSE = Object.assign({ likes: 1500, comments: 1700, shares: 1800 }, USER_CONFIG.PAUSE);
   const STABLE_LIMIT = 10, EMPTY_PASSES = 4;
 
   // ===== Politeness controls =====
-  const LIMITS = { MAX_ACTIONS_PER_MIN: 28, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 };
+  const LIMITS = Object.assign({ MAX_ACTIONS_PER_MIN: 28, SOFT_ROW_CAP: 2000, MAX_RUN_MS: 8*60*1000 }, USER_CONFIG.LIMITS);
   function jitter(ms, ratio=0.30){ const d=ms*ratio; return Math.max(0, Math.round(ms + (Math.random()*2-1)*d)); }
   async function yieldToBrowser(){ await new Promise(r=>requestAnimationFrame(r)); if('requestIdleCallback' in window){ await new Promise(r=>requestIdleCallback(r,{timeout:1200})); } }
 
