@@ -8,7 +8,7 @@
   const now = ()=>performance.now();
 
   // ===== Tuning knobs =====
-  const PAUSE = { likes: 1700, comments: 1900, shares: 2000 };
+  const PAUSE = { likes: 1500, comments: 1700, shares: 1800 };
   const STABLE_LIMIT = 10, EMPTY_PASSES = 4;
 
   // ===== Politeness controls =====
@@ -23,7 +23,7 @@
   const Throttle = (()=> {
     let pauseMult = 1;
     let tokens = LIMITS.MAX_ACTIONS_PER_MIN, maxTokens = LIMITS.MAX_ACTIONS_PER_MIN;
-    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 3000);
+    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 60000 / maxTokens);
     function spend(){ if(tokens<=0) return false; tokens--; return true; }
     function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 2.0 : 1.20)); }
     function ease(){ pauseMult = Math.max(1, pauseMult * 0.90); }
@@ -155,8 +155,8 @@
         '<div id="fbp-runind" style="display:flex;align-items:center;gap:8px;margin-top:6px">' +
           '<div id="fbp-led" style="width:10px;height:10px;border-radius:50%;background:#666"></div>' +
           '<div id="fbp-runtext" style="font-size:11px;opacity:.8;min-width:56px">Idle</div>' +
-          '<div style="flex:1;height:6px;background:#1a1f2b;border:1px solid #2b3344;border-radius:6px;overflow:hidden"><div id="fbp-prog" style="height:100%;width:0%;background:#3b7cff"></div></div>' +
-          '<div id="fbp-ops" style="font-size:11px;opacity:.75;width:68px;text-align:right">0/min</div>' +
+            '<div style="flex:1;height:6px;background:#1a1f2b;border:1px solid #2b3344;border-radius:6px;overflow:hidden"><div id="fbp-prog" style="height:100%;width:0%;background:#3b7cff"></div></div>' +
+            '<div id="fbp-ops" style="font-size:11px;opacity:.75;width:68px;text-align:right">0 items/min</div>' +
         '</div>' +
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap">' +
@@ -563,19 +563,18 @@
     if(state==='running'){ setLED(led,'#24d05a',true); runtext.textContent='Running'; }
     if(state==='paused'){ setLED(led,'#ffcc00',true); runtext.textContent='Paused'; }
     if(state==='backoff'){ setLED(led,'#ff6a00',true); runtext.textContent='Backoff'; }
-    if(state==='idle'){ setLED(led,'#666',false); runtext.textContent='Idle'; prog.style.width='0%'; opsEl.textContent='0/min'; }
+    if(state==='idle'){ setLED(led,'#666',false); runtext.textContent='Idle'; prog.style.width='0%'; opsEl.textContent='0 items/min'; }
     refreshControls();
   }
   function startHeartbeat(started){
     stopHeartbeat(); currentRunStarted = started; actionsThisRun = 0; setRunningState('running');
     heartbeat = setInterval(()=>{
       const elapsed = now() - currentRunStarted;
-      const cur = (activeMode === 'likes' ? counts.likes : activeMode === 'comments' ? counts.comments : counts.shares);
-      const pct = Math.min(100, Math.round((cur / LIMITS.SOFT_ROW_CAP) * 100));
+      const pct = Math.min(100, Math.round((elapsed / LIMITS.MAX_RUN_MS) * 100));
       prog.style.width = pct + '%';
       const mins = Math.max(0.016, elapsed/60000);
       const apm = Math.round(actionsThisRun / mins);
-      opsEl.textContent = apm + '/min';
+      opsEl.textContent = apm + ' items/min';
       if(pausedByUser || pausedByHidden) setRunningState('paused');
       else if(throttleSignal){ setRunningState('backoff'); throttleSignal=false; }
       else setRunningState('running');
