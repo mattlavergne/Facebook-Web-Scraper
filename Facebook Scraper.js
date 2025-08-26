@@ -100,7 +100,7 @@
       #fbp-prog { transition: width .2s ease }
 
       /* Preview flexes with available space */
-      #fbp-preview-wrap{ flex:1 1 auto; display:flex; flex-direction:column; min-height:0; max-height:1000px; transition:max-height .2s ease, opacity .2s ease; }
+      #fbp-preview-wrap{ flex:1 1 auto; display:flex; flex-direction:column; min-height:0; max-height:1000px; transition:max-height .2s ease, opacity .2s ease; overflow:hidden; }
       #fbp-preview-wrap.hidden{ max-height:0; opacity:0; }
       #fbp-prev{ flex:1 1 auto; overflow:auto; border:1px solid #3a3b3c; border-radius:8px; }
 
@@ -179,7 +179,7 @@
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
           '<span title="Preview of first 50">👁️ First 50</span>' +
         '</div>' +
-        '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
+        '<div id="fbp-prev"></div>' +
       '</div>' +
     '</div>' +
     '<div id="fbp-bar" class="fbp-bar">' +
@@ -347,6 +347,7 @@
   // ===== refs & utils (single, non-duplicated)
   const prevWrap  = ui.querySelector('#fbp-preview-wrap');
   const prevBox   = ui.querySelector('#fbp-prev');
+  const bar       = ui.querySelector('#fbp-bar');
   const likeC     = ui.querySelector('#fbp-likec');
   const commentC  = ui.querySelector('#fbp-commentc');
   const shareC    = ui.querySelector('#fbp-sharec');
@@ -582,12 +583,14 @@
 
   function adjustPreviewVisibility(){
     if(!prevBox.innerHTML){ prevWrap.classList.add('hidden'); return; }
-    const h = prevWrap.getBoundingClientRect().height;
-    if(h < 40) prevWrap.classList.add('hidden');
+
+    const avail = bar.getBoundingClientRect().top - prevWrap.getBoundingClientRect().top - 8;
+    if(avail < 40) prevWrap.classList.add('hidden');
     else prevWrap.classList.remove('hidden');
   }
   const _prevRO = new ResizeObserver(()=>adjustPreviewVisibility());
   _prevRO.observe(ui);
+  adjustPreviewVisibility();
 
   function escapeHTML(s){ return (s||'').replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
   function shorten(s,n){ s=String(s||''); return s.length>n ? (s.slice(0,n-1)+'…') : s; }
