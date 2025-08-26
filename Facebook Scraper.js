@@ -1,6 +1,6 @@
 // FB People Scraper — v17o_sticky_min2 (fix duplicate vars): sticky footer, min-height floor, header+footer-only minimize, narrower width, recenter hotkey
 (async function FB_Export_Persons_UNIFIED_v17o_sticky_min2(){
-  let MIN_PANEL_HEIGHT = 360;   // smallest non-minimized height
+  let MIN_PANEL_HEIGHT = 200;   // smallest non-minimized height
   const DEFAULT_W = 308, MIN_W = 300, DEFAULT_H = 276; // default non-minimized dimensions
   const PANEL_PADDING = '4px 0 8px 0';
 
