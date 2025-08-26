@@ -370,8 +370,10 @@
   setPostKeyLabel();
   (function(){
     function refreshPostKey(){
-      const resolved = resolvePostURL();
-      if (isPostURL(resolved)){
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      const top = dialogs[dialogs.length - 1];
+      const resolved = resolvePostURL(top);
+      if (isPostURL(resolved) && resolved !== POST_URL){
         POST_URL = resolved;
         setPostKeyLabel();
       }
@@ -380,7 +382,7 @@
     history.pushState = function(){ const r=_push.apply(this, arguments); refreshPostKey(); return r; };
     history.replaceState = function(){ const r=_replace.apply(this, arguments); refreshPostKey(); return r; };
     addEventListener('popstate', refreshPostKey);
-    let last = location.href; setInterval(()=>{ if(location.href!==last){ last=location.href; refreshPostKey(); } },1000);
+    setInterval(refreshPostKey,1000);
   })();
   ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
     try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }
