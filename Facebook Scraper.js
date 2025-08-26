@@ -161,18 +161,18 @@
       '</div>' +
       '<div id="fbp-stats" style="display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap">' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:98px">' +
-          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">👍<span>Likes</span></div><div id="fbp-likec" style="font-weight:700">0</div>' +
+          '<div style="display:flex;gap:4px;justify-content:center;align-items:center;font-weight:700"><span title="Likes">👍</span><span id="fbp-likec">0</span></div>' +
         '</div>' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:98px">' +
-          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">↗<span>Shares</span></div><div id="fbp-sharec" style="font-weight:700">0</div>' +
+          '<div style="display:flex;gap:4px;justify-content:center;align-items:center;font-weight:700"><span title="Shares">↗</span><span id="fbp-sharec">0</span></div>' +
         '</div>' +
         '<div style="flex:1;background:#141823;border:1px solid #293042;border-radius:8px;padding:8px;text-align:center;min-width:98px">' +
-          '<div style="opacity:.65;font-size:11px;display:flex;gap:6px;justify-content:center;align-items:center">💬<span>Comments</span></div><div id="fbp-commentc" style="font-weight:700">0</div>' +
+          '<div style="display:flex;gap:4px;justify-content:center;align-items:center;font-weight:700"><span title="Comments">💬</span><span id="fbp-commentc">0</span></div>' +
         '</div>' +
       '</div>' +
       '<div id="fbp-preview-wrap">' +
         '<div style="font-size:11px;opacity:.8;margin:8px 0 6px;display:flex;justify-content:space-between;align-items:center">' +
-          '<span>Preview (first 50)</span>' +
+          '<span title="Preview of first 50">👁️ First 50</span>' +
         '</div>' +
         '<div id="fbp-prev" style="height:80px;overflow:hidden;border:1px solid #293042;border-radius:8px"></div>' +
       '</div>' +
@@ -542,8 +542,8 @@
       '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px">' +
         '<colgroup><col style="width:44%"><col style="width:36%"><col style="width:6%"><col style="width:6%"><col style="width:8%"></colgroup>' +
         '<thead><tr style="position:sticky;top:0;background:#242526">' +
-          '<th style="text-align:left;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">Person_Name</th>' +
-          '<th style="text-align:left;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">Person</th>' +
+          '<th title="Person Name" style="text-align:left;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">👤</th>' +
+          '<th title="Profile URL" style="text-align:left;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">🔗</th>' +
           '<th title="Like" style="text-align:center;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">👍</th>' +
           '<th title="Share" style="text-align:center;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">↗</th>' +
           '<th title="Comment" style="text-align:center;padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap">💬</th>' +
@@ -553,12 +553,15 @@
     const n=Math.min(rows.length,50);
     for(let i=0;i<n;i++){
       const r=rows[i];
+      const like = r.Like==='Yes' ? '✓' : '✗';
+      const share = r.Share==='Yes' ? '✓' : '✗';
+      const comment = r.Comment==='Yes' ? '✓' : '✗';
       body+='<tr>' +
         '<td style="padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escapeHTML(r.Person_Name)+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"><a href="'+r.Person+'" target="_blank" style="color:#2374e1" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
-        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+r.Like+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+r.Share+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+r.Comment+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+like+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+share+'</td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+comment+'</td>' +
       '</tr>';
     }
     prevBox.innerHTML = head + body + '</tbody></table>';
