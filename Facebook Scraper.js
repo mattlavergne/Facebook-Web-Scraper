@@ -583,6 +583,7 @@
 
   function adjustPreviewVisibility(){
     if(!prevBox.innerHTML){ prevWrap.classList.add('hidden'); return; }
+
     const avail = bar.getBoundingClientRect().top - prevWrap.getBoundingClientRect().top - 8;
     if(avail < 40) prevWrap.classList.add('hidden');
     else prevWrap.classList.remove('hidden');
