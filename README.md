@@ -15,6 +15,16 @@ The latest version of the script can also be loaded from jsDelivr:
 https://cdn.jsdelivr.net/gh/mattlavergne/Facebook-Web-Scraper@main/Facebook%20Scraper.js
 ```
 
+To use the scraper as a Tampermonkey userscript, reference the same URL in an `@require` directive:
+
+```
+// ==UserScript==
+// @name         FB Web Scraper Loader
+// @match        *://www.facebook.com/*
+// @require      https://cdn.jsdelivr.net/gh/mattlavergne/Facebook-Web-Scraper@main/Facebook%20Scraper.js
+// ==/UserScript==
+```
+
 ## Configuration
 
 You can adjust timing and throttle limits without editing the script by defining a `FBP_CONFIG` object before running it:
