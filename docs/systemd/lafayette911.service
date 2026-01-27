@@ -1,0 +1,21 @@
+[Unit]
+Description=Lafayette 911 incident scraper
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/lafayette911
+Environment=L911_INCIDENTS_URL=https://example.org/incidents.json
+Environment=L911_OUTPUT_DIR=/var/www/html/lafayette911
+Environment=L911_SQLITE_PATH=/var/lib/lafayette911/incidents.sqlite3
+Environment=L911_POLL_INTERVAL=30
+Environment=L911_LOG_LEVEL=INFO
+Environment=L911_RETENTION_SECONDS=604800
+ExecStart=/usr/bin/python3 -m lafayette911.main --mode combined
+Restart=always
+RestartSec=5
+MemoryMax=200M
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
