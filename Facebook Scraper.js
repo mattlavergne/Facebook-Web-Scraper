@@ -1,5 +1,5 @@
-// FB People Scraper — v17o_sticky_min2 (fix duplicate vars): sticky footer, min-height floor, header+footer-only minimize, narrower width, recenter hotkey
-(async function FB_Export_Persons_UNIFIED_v17o_sticky_min2(){
+// FB People Scraper — v18 (safer network hooks, selector health-check, settings UI, improved CSV export)
+(async function FB_Export_Persons_UNIFIED_v18(){
   let MIN_PANEL_HEIGHT = 200;   // smallest non-minimized height
   const DEFAULT_W = 308, MIN_W = 300, DEFAULT_H = 450; // default non-minimized dimensions
   const PANEL_PADDING = '4px 0 8px 0';
@@ -8,6 +8,14 @@
   const now = ()=>performance.now();
 
   const USER_CONFIG = window.FBP_CONFIG || {};
+  // Merge settings persisted via the in-panel Settings UI (localStorage wins over defaults, but not over window.FBP_CONFIG)
+  try {
+    const _lc = JSON.parse(localStorage.getItem('fbp_user_config')||'null');
+    if(_lc){
+      if(_lc.PAUSE)  USER_CONFIG.PAUSE  = Object.assign({}, _lc.PAUSE,  USER_CONFIG.PAUSE);
+      if(_lc.LIMITS) USER_CONFIG.LIMITS = Object.assign({}, _lc.LIMITS, USER_CONFIG.LIMITS);
+    }
+  }catch{}
 
   // ===== Tuning knobs =====
   const PAUSE = Object.assign({ likes: 1500, comments: 1700, shares: 1800 }, USER_CONFIG.PAUSE);
@@ -37,23 +45,38 @@
     return { spend, backoff, ease, politeWait };
   })();
 
-  // ===== Throttle sensing =====
+  // ===== Throttle sensing — guarded so re-running the script restores then re-patches cleanly =====
   let throttleSignal = false;
-  (function monitorNetwork(){
+  if(window.__fbp_restoreNet){ try{ window.__fbp_restoreNet(); }catch{} }
+  const networkMonitor = (function(){
+    let active = false;
     const origFetch = window.fetch;
-    window.fetch = async (...args)=>{
-      const res = await origFetch(...args);
-      if(res && (res.status===429 || res.status===403)){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
-      return res;
-    };
-    const origSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.send = function(...a){
-      this.addEventListener('load', function(){
-        if(this.status===429 || this.status===403){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
-      });
-      return origSend.apply(this, a);
-    };
+    const origSend  = XMLHttpRequest.prototype.send;
+    function onThrottle(){ throttleSignal=true; toast('Server throttle detected. Backing off.', 2000); Throttle.backoff(true); }
+    function enable(){
+      if(active) return;
+      active = true;
+      window.fetch = async (...args)=>{
+        const res = await origFetch(...args);
+        if(res && (res.status===429 || res.status===403)) onThrottle();
+        return res;
+      };
+      XMLHttpRequest.prototype.send = function(...a){
+        this.addEventListener('load', function(){ if(this.status===429||this.status===403) onThrottle(); });
+        return origSend.apply(this, a);
+      };
+      window.__fbp_restoreNet = disable;
+    }
+    function disable(){
+      if(!active) return;
+      active = false;
+      window.fetch = origFetch;
+      XMLHttpRequest.prototype.send = origSend;
+      window.__fbp_restoreNet = null;
+    }
+    return { enable, disable };
   })();
+  networkMonitor.enable();
 
   // ===== Styles =====
   (function injectStyles(){
@@ -110,6 +133,22 @@
       .fbp-bar.float-bottom{ position:absolute; left:8px; right:8px; bottom:8px; margin-top:0; z-index:4; }
       .fbp-bar .iconbtn{ flex:1 1 44px; min-width:32px; height:32px; display:grid; place-items:center; font-size:16px; border-radius:8px }
       .fbp-bar .grow{ flex:2 1 100px; min-width:80px; height:32px }
+
+      /* Settings overlay */
+      #fbp-settings{
+        position:absolute; inset:0; background:#1a1c1e; z-index:10;
+        padding:12px; overflow-y:auto; border-radius:12px;
+        display:none; flex-direction:column; gap:6px;
+      }
+      #fbp-settings.open{ display:flex; }
+      .fbp-shdr{ font-size:10px; opacity:.5; text-transform:uppercase; letter-spacing:.5px; padding-top:4px; }
+      .fbp-srow{ display:flex; align-items:center; gap:8px; }
+      .fbp-srow label{ font-size:12px; flex:1; }
+      .fbp-srow input[type=number]{
+        width:72px; background:#242526; border:1px solid #3a3b3c;
+        border-radius:6px; color:#e4e6eb; font-size:12px; padding:4px 6px; text-align:right;
+      }
+      .fbp-srow input[type=number]:focus{ outline:none; border-color:#2374e1; }
     `;
     document.head.appendChild(style);
   })();
@@ -144,6 +183,7 @@
       '<button id="fbp-copyurl" aria-label="Copy URL" title="Copy URL" class="fbp-btn round" style="height:28px;width:36px;padding:0;flex:0 0 36px">⧉</button>' +
       '<div id="fbp-postkey" title=""></div>' +
       '<div id="fbp-win">' +
+        '<button id="fbp-gear" aria-label="Settings" title="Settings" class="fbp-btn winbtn">⚙</button>' +
         '<button id="fbp-min" aria-label="Minimize" title="Minimize" class="fbp-btn winbtn">–</button>' +
         '<button id="fbp-close" aria-label="Close" title="Close" class="fbp-btn winbtn close">×</button>' +
       '</div>' +
@@ -187,6 +227,22 @@
       '<button id="fbp-stop" class="fbp-btn iconbtn" title="Stop">■</button>' +
       '<button id="fbp-dl" class="fbp-btn green grow" title="Download CSV">⬇ Download CSV</button>' +
       '<button id="fbp-reset" class="fbp-btn iconbtn" title="Reset">↻</button>' +
+    '</div>' +
+    '<div id="fbp-settings">' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:6px">⚙ Settings</div>' +
+      '<div class="fbp-shdr">Scroll delays (ms)</div>' +
+      '<div class="fbp-srow"><label for="fbp-s-likes">Likes</label><input id="fbp-s-likes" type="number" min="500" max="10000" step="100"></div>' +
+      '<div class="fbp-srow"><label for="fbp-s-comments">Comments</label><input id="fbp-s-comments" type="number" min="500" max="10000" step="100"></div>' +
+      '<div class="fbp-srow"><label for="fbp-s-shares">Shares</label><input id="fbp-s-shares" type="number" min="500" max="10000" step="100"></div>' +
+      '<div class="fbp-shdr" style="margin-top:6px">Limits</div>' +
+      '<div class="fbp-srow"><label for="fbp-s-apm">Max actions / min</label><input id="fbp-s-apm" type="number" min="5" max="60" step="1"></div>' +
+      '<div class="fbp-srow"><label for="fbp-s-rowcap">Row cap</label><input id="fbp-s-rowcap" type="number" min="100" max="10000" step="100"></div>' +
+      '<div class="fbp-srow"><label for="fbp-s-maxrun">Max run (min)</label><input id="fbp-s-maxrun" type="number" min="1" max="60" step="1"></div>' +
+      '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">' +
+        '<button id="fbp-s-save" class="fbp-btn primary" style="flex:1">Save</button>' +
+        '<button id="fbp-s-cancel" class="fbp-btn" style="flex:1">Cancel</button>' +
+        '<button id="fbp-s-reset" class="fbp-btn" style="width:100%;margin-top:2px">↺ Reset defaults</button>' +
+      '</div>' +
     '</div>';
   document.body.appendChild(ui);
 
@@ -223,7 +279,7 @@
   })();
 
   // ===== Window controls / minimize
-  ui.querySelector('#fbp-close').addEventListener('click', ()=>ui.remove());
+  ui.querySelector('#fbp-close').addEventListener('click', ()=>{ networkMonitor.disable(); ui.remove(); });
   (function(){
     const bodyEl = ui.querySelector('#fbp-body');
     const headEl = ui.querySelector('#fbp-head');
@@ -372,7 +428,7 @@
     const postKeyEl=ui.querySelector('#fbp-postkey');
     const key=postKeyFromURL(POST_URL);
     const short=(key.length>42? (key.slice(0,42)+'…'):key);
-    postKeyEl.innerHTML='<a href="'+key+'" target="_blank" title="'+key+'">'+short+'</a>';
+    postKeyEl.innerHTML='<a href="'+escapeHTML(key)+'" target="_blank" title="'+escapeHTML(key)+'">'+escapeHTML(short)+'</a>';
   }
   setPostKeyLabel();
   (function(){
@@ -468,7 +524,7 @@
   }
 
   function getDialog(container){ return container.closest && container.closest('[role="dialog"]'); }
-  const norm = s => String(s||'').replace(/\u00A0/g,' ').toLowerCase();
+  const norm = s => String(s||'').replace(/ /g,' ').toLowerCase();
   function dialogText(dlg){
     if(!dlg) return '';
     const aria = norm(dlg.getAttribute('aria-label')||'');
@@ -525,6 +581,20 @@
     return 'unknown';
   }
 
+  // ===== Selector health-check — warns if Facebook's DOM structure no longer matches expected selectors =====
+  function healthCheck(mode, container){
+    if(!container) return;
+    const checks = {
+      likes:    { sel: '[role="listitem"],[data-visualcompletion="ignore-dynamic"]', label: 'reaction list items' },
+      comments: { sel: '[role="article"][aria-label^="Comment by "]',               label: 'comment articles' },
+      shares:   { sel: '[data-ad-rendering-role="profile_name"] a[href], h3 a[href]', label: 'sharer profile links' },
+    };
+    const { sel, label } = checks[mode] || {};
+    if(sel && container.querySelectorAll(sel).length === 0){
+      toast(`⚠ No ${label} found. Facebook's layout may have changed — results could be incomplete.`, 3500);
+    }
+  }
+
   function upsertRow(name,url,mode){
     if(!name||!url) return; if(!looksLikeProfile(url)) return;
     const key=url;
@@ -570,7 +640,7 @@
       const comment = r.Comment==='Yes' ? '✓' : '✗';
       body+='<tr>' +
         '<td style="padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+escapeHTML(r.Person_Name)+'</td>' +
-        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"><a href="'+r.Person+'" target="_blank" style="color:#2374e1" title="'+r.Person+'">'+shorten(r.Person,40)+'</a></td>' +
+        '<td style="padding:6px;border-bottom:1px solid #3a3b3c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"><a href="'+escapeHTML(r.Person)+'" target="_blank" style="color:#2374e1" title="'+escapeHTML(r.Person)+'">'+escapeHTML(shorten(r.Person,40))+'</a></td>' +
         '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+like+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+share+'</td>' +
         '<td style="padding:6px;border-bottom:1px solid #3a3b3c;text-align:center">'+comment+'</td>' +
@@ -597,11 +667,27 @@
 
   function downloadMerged(){
     const rows = Array.from(store.values());
+    // Wrap in quotes, escape inner quotes, and guard against CSV formula injection
+    const safeField = v => {
+      const s = String(v ?? '');
+      const inner = s.replace(/"/g, '""');
+      return /^[=+\-@\t\r]/.test(s) ? '"\'' + inner + '"' : '"' + inner + '"';
+    };
+    const modesCollected = ['likes','comments','shares'].filter(m=>counts[m]>0).join('/') || activeMode;
+    const ts = new Date().toISOString();
+    const meta = [
+      '# FB People Scraper Export',
+      '# Exported: ' + ts,
+      '# Source URL: ' + POST_URL,
+      '# Modes collected: ' + modesCollected,
+      '# Total rows: ' + rows.length,
+      '',
+    ].join('\n');
     const header = 'Person_Name,Person,Like,Share,Comment,Publication_URL\n';
-    const q = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
-    const body = rows.map(r => [q(r.Person_Name), q(r.Person), q(r.Like), q(r.Share), q(r.Comment), q(r.Publication_URL)].join(',')).join('\n');
-    const blob = new Blob([header + body], { type: 'text/csv' });
-    const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'facebook_engagements_export_from_fb.csv' });
+    const body = rows.map(r=>[safeField(r.Person_Name),safeField(r.Person),safeField(r.Like),safeField(r.Share),safeField(r.Comment),safeField(r.Publication_URL)].join(',')).join('\n');
+    const blob = new Blob([meta + header + body], { type: 'text/csv' });
+    const slug = ts.replace(/[:.]/g,'-').slice(0,19);
+    const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'fb_scraper_' + slug + '.csv' });
     document.body.appendChild(link); link.click(); link.remove();
   }
 
@@ -650,6 +736,48 @@
   btnDL.addEventListener('click', downloadMerged);
   btnReset.addEventListener('click', ()=>{ resetForThisPost(); toast('Cleared for this post.'); });
 
+  // ===== Settings popover
+  (function(){
+    const settingsPanel = ui.querySelector('#fbp-settings');
+    const gearBtn      = ui.querySelector('#fbp-gear');
+    const DEFAULTS = { likes:1500, comments:1700, shares:1800, apm:28, rowcap:2000, maxrun:8 };
+
+    function openSettings(){
+      ui.querySelector('#fbp-s-likes').value    = PAUSE.likes;
+      ui.querySelector('#fbp-s-comments').value = PAUSE.comments;
+      ui.querySelector('#fbp-s-shares').value   = PAUSE.shares;
+      ui.querySelector('#fbp-s-apm').value      = LIMITS.MAX_ACTIONS_PER_MIN;
+      ui.querySelector('#fbp-s-rowcap').value   = LIMITS.SOFT_ROW_CAP;
+      ui.querySelector('#fbp-s-maxrun').value   = Math.round(LIMITS.MAX_RUN_MS / 60000);
+      settingsPanel.classList.add('open');
+    }
+    function closeSettings(){ settingsPanel.classList.remove('open'); }
+
+    gearBtn.addEventListener('click', ()=> settingsPanel.classList.contains('open') ? closeSettings() : openSettings());
+    ui.querySelector('#fbp-s-cancel').addEventListener('click', closeSettings);
+
+    ui.querySelector('#fbp-s-save').addEventListener('click', ()=>{
+      const get = (id, min, max) => Math.min(max, Math.max(min, parseInt(ui.querySelector(id).value)||0));
+      PAUSE.likes                  = get('#fbp-s-likes',    500, 10000);
+      PAUSE.comments               = get('#fbp-s-comments', 500, 10000);
+      PAUSE.shares                 = get('#fbp-s-shares',   500, 10000);
+      LIMITS.MAX_ACTIONS_PER_MIN   = get('#fbp-s-apm',        5,    60);
+      LIMITS.SOFT_ROW_CAP          = get('#fbp-s-rowcap',   100, 10000);
+      LIMITS.MAX_RUN_MS            = get('#fbp-s-maxrun',     1,    60) * 60000;
+      try{ localStorage.setItem('fbp_user_config', JSON.stringify({ PAUSE, LIMITS })); }catch{}
+      toast('Settings saved.', 1200);
+      closeSettings();
+    });
+
+    ui.querySelector('#fbp-s-reset').addEventListener('click', ()=>{
+      localStorage.removeItem('fbp_user_config');
+      PAUSE.likes = DEFAULTS.likes; PAUSE.comments = DEFAULTS.comments; PAUSE.shares = DEFAULTS.shares;
+      LIMITS.MAX_ACTIONS_PER_MIN = DEFAULTS.apm; LIMITS.SOFT_ROW_CAP = DEFAULTS.rowcap; LIMITS.MAX_RUN_MS = DEFAULTS.maxrun * 60000;
+      toast('Settings reset to defaults.', 1200);
+      closeSettings();
+    });
+  })();
+
   // ===== Run control
   let runToken=0;
   function setUIBusy(busy, label){
@@ -687,6 +815,9 @@
     const maybeURL = resolvePostURL(dlg);
     if (isPostURL(maybeURL)) POST_URL = maybeURL;
     setPostKeyLabel();
+
+    // Warn early if key selectors return nothing — likely a Facebook layout change
+    healthCheck(activeMode, sc);
 
     const myToken = ++runToken;
     setUIBusy(true, 'Collecting…'); startHeartbeat(now());
