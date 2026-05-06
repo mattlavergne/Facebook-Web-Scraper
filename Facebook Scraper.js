@@ -1,4 +1,4 @@
-// FB People Scraper — v18 (safer network hooks, selector health-check, settings UI, improved CSV export)
+// FB People Scraper — v18.1 (safer hooks, health-check, settings UI, improved CSV, cleanup on close, unified runner)
 (async function FB_Export_Persons_UNIFIED_v18(){
   let MIN_PANEL_HEIGHT = 200;   // smallest non-minimized height
   const DEFAULT_W = 308, MIN_W = 300, DEFAULT_H = 450; // default non-minimized dimensions
@@ -6,6 +6,9 @@
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const now = ()=>performance.now();
+
+  // Cleanup callbacks registered throughout; all fired when the panel closes
+  const cleanups = [];
 
   const USER_CONFIG = window.FBP_CONFIG || {};
   // Merge settings persisted via the in-panel Settings UI (localStorage wins over defaults, but not over window.FBP_CONFIG)
@@ -28,12 +31,15 @@
 
   let pausedByUser = false;
   let pausedByHidden = document.hidden;
-  document.addEventListener('visibilitychange', ()=>{ pausedByHidden = document.hidden; });
+  const _visHandler = ()=>{ pausedByHidden = document.hidden; };
+  document.addEventListener('visibilitychange', _visHandler);
+  cleanups.push(()=>document.removeEventListener('visibilitychange', _visHandler));
 
   const Throttle = (()=> {
     let pauseMult = 1;
     let tokens = LIMITS.MAX_ACTIONS_PER_MIN, maxTokens = LIMITS.MAX_ACTIONS_PER_MIN;
-    setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 60000 / maxTokens);
+    const _tid = setInterval(()=>{ tokens = Math.min(maxTokens, tokens + 1); }, 60000 / maxTokens);
+    cleanups.push(()=>clearInterval(_tid));
     function spend(){ if(tokens<=0) return false; tokens--; return true; }
     function backoff(hard=false){ pauseMult = Math.min(8, pauseMult * (hard ? 2.0 : 1.20)); }
     function ease(){ pauseMult = Math.max(1, pauseMult * 0.90); }
@@ -254,32 +260,13 @@
     ui.style.minHeight = MIN_PANEL_HEIGHT + 'px';
   }catch{}
 
-  // ===== Always keep it visible + quick reset hotkey
-  (function ensureVisible(){
-    const m=8;
-    function clamp(){
-      const w=ui.offsetWidth||DEFAULT_W, h=ui.offsetHeight||MIN_PANEL_HEIGHT;
-      const vw=innerWidth, vh=innerHeight;
-      let top=parseInt(getComputedStyle(ui).top,10);    if(!Number.isFinite(top) || top < m || top > vh - 60) top = 16;
-      let right=parseInt(getComputedStyle(ui).right,10);if(!Number.isFinite(right) || right < m || (vw - right - w) < 6) right = 16;
-      ui.style.top = top+'px';
-      ui.style.right = right+'px';
-    }
-    clamp();
-    addEventListener('resize', clamp);
-    addEventListener('keydown', e=>{
-      if(e.altKey && e.shiftKey && (e.key.toLowerCase()==='f')){
-        ui.style.top='16px'; ui.style.right='16px';
-        localStorage.removeItem('fbp_ui_pos');
-        localStorage.setItem('fbp_ui_min','0');
-        const bodyEl = ui.querySelector('#fbp-body');
-        if (bodyEl && bodyEl.style.display==='none'){ bodyEl.style.display='flex'; ui.style.resize='both'; moveBar(false); }
-      }
-    });
-  })();
-
-  // ===== Window controls / minimize
-  ui.querySelector('#fbp-close').addEventListener('click', ()=>{ networkMonitor.disable(); ui.remove(); });
+  // ===== Window controls / minimize — defined before ensureVisible so moveBar is in scope
+  ui.querySelector('#fbp-close').addEventListener('click', ()=>{
+    cleanups.forEach(fn=>{ try{ fn(); }catch{} });
+    networkMonitor.disable();
+    ui.remove();
+  });
+  let moveBar = (_min)=>{};  // assigned below; declared here so ensureVisible keydown can call it
   (function(){
     const bodyEl = ui.querySelector('#fbp-body');
     const headEl = ui.querySelector('#fbp-head');
@@ -293,10 +280,10 @@
       ? { w: Math.max(saved.w, MIN_W), h: Math.max(saved.h, DEFAULT_H) }
       : { w: parseInt(getComputedStyle(ui).width,10), h: parseInt(getComputedStyle(ui).height,10) };
 
-    function moveBar(min){
+    moveBar = function(min){
       if(min){ barEl.classList.add('float-bottom'); }
       else   { barEl.classList.remove('float-bottom'); }
-    }
+    };
 
     function applyMin(min){
       minimized = min;
@@ -338,6 +325,33 @@
       lastSize = { w, h };
     });
     ro.observe(ui);
+    cleanups.push(()=>ro.disconnect());
+  })();
+
+  // ===== Always keep it visible + quick reset hotkey
+  (function ensureVisible(){
+    const m=8;
+    function clamp(){
+      const w=ui.offsetWidth||DEFAULT_W, h=ui.offsetHeight||MIN_PANEL_HEIGHT;
+      const vw=innerWidth, vh=innerHeight;
+      let top=parseInt(getComputedStyle(ui).top,10);    if(!Number.isFinite(top) || top < m || top > vh - 60) top = 16;
+      let right=parseInt(getComputedStyle(ui).right,10);if(!Number.isFinite(right) || right < m || (vw - right - w) < 6) right = 16;
+      ui.style.top = top+'px';
+      ui.style.right = right+'px';
+    }
+    const _keydown = e=>{
+      if(e.altKey && e.shiftKey && (e.key.toLowerCase()==='f')){
+        ui.style.top='16px'; ui.style.right='16px';
+        localStorage.removeItem('fbp_ui_pos');
+        localStorage.setItem('fbp_ui_min','0');
+        const bodyEl = ui.querySelector('#fbp-body');
+        if (bodyEl && bodyEl.style.display==='none'){ bodyEl.style.display='flex'; ui.style.resize='both'; moveBar(false); }
+      }
+    };
+    clamp();
+    addEventListener('resize', clamp);
+    addEventListener('keydown', _keydown);
+    cleanups.push(()=>{ removeEventListener('resize', clamp); removeEventListener('keydown', _keydown); });
   })();
 
   // ===== Toasts =====
@@ -361,27 +375,35 @@
     const pos = JSON.parse(localStorage.getItem('fbp_ui_pos')||'{}');
     if(pos.top!=null && pos.right!=null){ ui.style.top=pos.top+'px'; ui.style.right=pos.right+'px'; }
     let sx=0, sy=0, startTop=0, startRight=0, dragging=false;
-    head.addEventListener('mousedown', e=>{
+    const _md = e=>{
       if(e.target.closest('#fbp-win')) return;
       dragging=true; sx=e.clientX; sy=e.clientY;
       startTop=parseInt(getComputedStyle(ui).top,10);
       startRight=parseInt(getComputedStyle(ui).right,10);
       e.preventDefault();
-    }, true);
-    window.addEventListener('mousemove', e=>{
+    };
+    const _mm = e=>{
       if(!dragging) return;
       const dx=e.clientX-sx, dy=e.clientY-sy;
       ui.style.top = Math.max(8, startTop + dy) + 'px';
       ui.style.right = Math.max(8, startRight - dx) + 'px';
-    }, true);
-    window.addEventListener('mouseup', ()=>{
+    };
+    const _mu = ()=>{
       if(!dragging) return;
       dragging=false;
       localStorage.setItem('fbp_ui_pos', JSON.stringify({
         top: parseInt(ui.style.top,10)||16,
         right: parseInt(ui.style.right,10)||16
       }));
-    }, true);
+    };
+    head.addEventListener('mousedown', _md, true);
+    window.addEventListener('mousemove', _mm, true);
+    window.addEventListener('mouseup', _mu, true);
+    cleanups.push(()=>{
+      head.removeEventListener('mousedown', _md, true);
+      window.removeEventListener('mousemove', _mm, true);
+      window.removeEventListener('mouseup', _mu, true);
+    });
   })();
 
   // ===== modes (Likes / Shares / Comments)
@@ -445,7 +467,13 @@
     history.pushState = function(){ const r=_push.apply(this, arguments); refreshPostKey(); return r; };
     history.replaceState = function(){ const r=_replace.apply(this, arguments); refreshPostKey(); return r; };
     addEventListener('popstate', refreshPostKey);
-    setInterval(refreshPostKey,1000);
+    const _pkid = setInterval(refreshPostKey, 1000);
+    cleanups.push(()=>{
+      clearInterval(_pkid);
+      history.pushState = _push;
+      history.replaceState = _replace;
+      removeEventListener('popstate', refreshPostKey);
+    });
   })();
   ui.querySelector('#fbp-copyurl').addEventListener('click', async ()=>{
     try{ await navigator.clipboard.writeText(POST_URL); toast('Post URL copied'); }
@@ -660,6 +688,7 @@
   }
   const _prevRO = new ResizeObserver(()=>adjustPreviewVisibility());
   _prevRO.observe(ui);
+  cleanups.push(()=>_prevRO.disconnect());
   adjustPreviewVisibility();
 
   function escapeHTML(s){ return (s||'').replace(/[&<>"]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
@@ -834,15 +863,33 @@
     else { toast('Done for this mode ✓'); }
   });
 
-  // ===== Runners (unchanged logic)
+  // ===== Shared scroll loop — handles timing, caps, backoff, block detection, and scroll for all modes.
+  // iterFn() performs one pass of mode-specific DOM scraping and returns { found, grew }.
+  async function runScrape(token, mode, maxIter, iterFn){
+    const started = now(); let prevH=-1, stable=0, emptyPass=0, anyFound=false;
+    for(let i=0; i<maxIter && stable<STABLE_LIMIT; i++){
+      if(token !== runToken) return false;
+      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
+      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+      const { found, grew } = iterFn();
+      if(found > 0) anyFound = true;
+      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; } else { emptyPass=0; Throttle.ease(); }
+      maybeRender(grew);
+      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
+      await Throttle.politeWait(PAUSE[mode]);
+      const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
+      const bodyTxt = document.body.innerText.toLowerCase();
+      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('’re temporarily blocked')){ toast('Temporary block text detected. Cooling down.', 2000); Throttle.backoff(true); break; }
+    }
+    maybeRender(true);
+    return anyFound;
+  }
+
   async function runLikes(token){
     const kind = detectPanelType(sc);
     if (kind !== 'likes' && kind !== 'unknown') { toast('This panel doesn’t look like the Reactions list; aborting likes run.', 1800); return; }
-    const started = now(); let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0;
-    for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
-      if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+    const seenRun = new Set();
+    await runScrape(token, 'likes', 280, ()=>{
       let grew=false, found=0;
       likeItems().forEach(it=>{
         const a = pickLikeAnchor(it); if(!a) return;
@@ -853,25 +900,16 @@
         if(store.size>before){ grew=true; found++; }
       });
       counts.likes = Array.from(store.values()).filter(r=>r.Like==='Yes').length;
-      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; } else { emptyPass=0; Throttle.ease(); }
-      maybeRender(grew);
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
-      await Throttle.politeWait(PAUSE.likes);
-      const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
-      const bodyTxt = document.body.innerText.toLowerCase();
-      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){ toast('Temporary block text detected. Cooling down.', 2000); Throttle.backoff(true); break; }
-    }
-    maybeRender(true);
+      return { found, grew };
+    });
   }
+
   async function runComments(token){
     const dlg=getDialog(sc); const text=dialogText(dlg);
     if(/\bshare\b/.test(text) || /\bshared?\s+this\b/.test(text)){ toast('You clicked the Shares dialog; aborting comments run.', 1800); return; }
     if(detectPanelType(sc) !== 'comments'){ toast('This panel doesn’t look like the main Comments list; aborting.', 1800); return; }
-    const started = now(); let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
-    for(let i=0;i<320 && stable<STABLE_LIMIT;i++){
-      if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+    const seenRun = new Set();
+    const anyFound = await runScrape(token, 'comments', 320, ()=>{
       let grew=false, found=0;
       commentArticles().forEach(art=>{
         const a = pickCommentAnchor(art); if(!a) return;
@@ -879,7 +917,7 @@
         if(seenRun.has(url)) return; seenRun.add(url);
         const name=getNameFromAnchor(a);
         const before = store.size; upsertRow(name,url,'comments');
-        if(store.size>before){ grew=true; found++; anyFound=true; }
+        if(store.size>before){ grew=true; found++; }
       });
       let clicked=0;
       sc.querySelectorAll('div[role="button"],button').forEach(b=>{
@@ -888,44 +926,27 @@
         if(t.includes('view more comment')||t.includes('more comments')||t.includes('replies')){ b.click(); clicked++; actionsThisRun++; }
       });
       counts.comments = Array.from(store.values()).filter(r=>r.Comment==='Yes').length;
-      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; } else { emptyPass=0; Throttle.ease(); }
-      maybeRender(grew);
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
-      await Throttle.politeWait(PAUSE.comments);
-      const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
-      const bodyTxt = document.body.innerText.toLowerCase();
-      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){ toast('Temporary block text detected. Cooling down.', 2000); Throttle.backoff(true); break; }
-    }
+      return { found, grew };
+    });
     if(!anyFound) toast('No comments found in this panel.', 1400);
-    maybeRender(true);
   }
+
   async function runShares(token){
     if(!isSharesPanel(sc)){ toast('This panel doesn’t look like the Shares list; aborting shares run.', 1800); return; }
-    const started = now(); let prevH=-1, stable=0, seenRun=new Set(), emptyPass=0, anyFound=false;
-    for(let i=0;i<280 && stable<STABLE_LIMIT;i++){
-      if(token !== runToken) return;
-      if((now() - started) > LIMITS.MAX_RUN_MS){ toast('Run time cap reached.', 1600); break; }
-      if(store.size >= LIMITS.SOFT_ROW_CAP){ toast('Row cap reached. Stopping.', 1600); break; }
+    const seenRun = new Set();
+    const anyFound = await runScrape(token, 'shares', 280, ()=>{
       let grew=false, found=0;
-      const as = sharerAnchors(sc);
-      as.forEach(a=>{
+      sharerAnchors(sc).forEach(a=>{
         const url=normalizeFB(a.getAttribute('href')); if(!url) return;
         if(seenRun.has(url)) return; seenRun.add(url);
         const name=getNameFromAnchor(a);
         const before = store.size; upsertRow(name,url,'shares');
-        if(store.size>before){ grew=true; found++; anyFound=true; }
+        if(store.size>before){ grew=true; found++; }
       });
       counts.shares = Array.from(store.values()).filter(r=>r.Share==='Yes').length;
-      if(found===0){ Throttle.backoff(false); if(++emptyPass>=EMPTY_PASSES) break; } else { emptyPass=0; Throttle.ease(); }
-      maybeRender(grew);
-      if(Throttle.spend()){ sc.scrollBy(0, Math.round(sc.clientHeight * 0.75)); actionsThisRun++; }
-      await Throttle.politeWait(PAUSE.shares);
-      const h=sc.scrollHeight; stable=(h===prevH)?(stable+1):0; prevH=h;
-      const bodyTxt = document.body.innerText.toLowerCase();
-      if(bodyTxt.includes("you're temporarily blocked") || bodyTxt.includes('you’re temporarily blocked')){ toast('Temporary block text detected. Cooling down.', 2000); Throttle.backoff(true); break; }
-    }
+      return { found, grew };
+    });
     if(!anyFound) toast('No shares found in this panel.', 1400);
-    maybeRender(true);
   }
 
   // initial render
